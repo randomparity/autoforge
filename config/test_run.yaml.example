@@ -1,0 +1,38 @@
+# test_run.yaml — DTS test run configuration
+# Copy this file to test_run.yaml and adjust for your environment.
+# test_run.yaml is gitignored; it may contain lab-specific paths and settings.
+
+test_runs:
+  - sut_node: sut              # must match a node name in nodes.yaml
+    tg_node: tg                # must match a node name in nodes.yaml
+
+    # DPDK build target
+    build_targets:
+      - arch: x86_64
+        os: linux
+        cpu: native            # native | generic | <specific march>
+        compiler: gcc
+        compiler_wrapper:      # leave empty; set to "ccache" to enable caching
+
+    # Test suites and cases to execute.
+    # An empty cases list means "run all cases in the suite".
+    test_suites:
+      - suite: TestPmd
+        cases: []              # e.g. ["test_perf_throughput"] to run a subset
+
+    # Performance test settings
+    perf:
+      enabled: true
+      # Duration in seconds for each throughput measurement trial
+      trial_duration: 60
+      # Number of trials per data point; result is the median
+      trial_count: 3
+      # Packet sizes (bytes) to sweep
+      packet_sizes: [64, 128, 256, 512, 1024, 1518]
+      # testpmd forwarding mode: io | mac | macswap | flowgen
+      forward_mode: io
+      # Number of queues per port
+      nb_queues: 1
+      # Number of descriptors per Rx/Tx queue
+      nb_rxd: 1024
+      nb_txd: 1024

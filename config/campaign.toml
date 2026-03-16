@@ -1,0 +1,28 @@
+[campaign]
+name = "testpmd-throughput"
+max_iterations = 50
+
+[metric]
+name = "throughput_mpps"
+# Dot-separated path into the DTS JSON result structure
+path = "test_runs.0.test_suites.0.test_cases.0.throughput_mpps"
+# "maximize" or "minimize"
+direction = "maximize"
+# Stop early if improvement between iterations falls below this value
+threshold = 0.01
+
+[dts]
+test_suites = ["TestPmd"]
+perf = true
+
+[agent]
+# Seconds between polling DTS job status
+poll_interval = 30
+# Total wall-clock budget for a single DTS run
+timeout_minutes = 60
+
+[dpdk]
+# Path to the DPDK git submodule relative to repo root
+submodule_path = "dpdk"
+# Source paths the agent is allowed to modify (relative to submodule_path)
+scope = ["lib/", "drivers/net/", "app/test-pmd/"]

@@ -1,0 +1,63 @@
+# nodes.yaml — DTS node definitions for a two-node SUT/TG topology
+# Copy this file to nodes.yaml and replace placeholder values with real ones.
+# nodes.yaml is gitignored; never commit hostnames, credentials, or PCI IDs
+# that belong to specific lab hardware.
+
+nodes:
+  - name: sut  # system under test — runs testpmd
+    hostname: sut.example.lab  # FQDN or IP reachable from the DTS controller
+    user: root
+    arch: x86_64              # x86_64 | arm64 | ppc64le
+    os: linux
+
+    # Logical CPU cores available to DPDK (forwarding lcores + main lcore)
+    lcores: "1-7"
+
+    memory_channels: 4        # number of DRAM channels (passed to EAL -n)
+
+    hugepages:
+      size_kb: 1048576         # 1 GB pages
+      count: 8
+
+    ports:
+      - pci: "0000:41:00.0"   # first NIC port bound to DPDK PMD
+        driver: vfio-pci       # kernel driver used after bind (vfio-pci or igb_uio)
+        # mac: "aa:bb:cc:dd:ee:01"   # optional; overrides auto-detection
+      - pci: "0000:41:00.1"
+        driver: vfio-pci
+
+    nics:
+      - pci: "0000:41:00.0"
+        name: ens1f0            # kernel interface name (used before binding)
+        driver: ice             # native kernel driver
+      - pci: "0000:41:00.1"
+        name: ens1f1
+        driver: ice
+
+  - name: tg   # traffic generator — runs Scapy TG or hardware TG
+    hostname: tg.example.lab
+    user: root
+    arch: x86_64
+    os: linux
+
+    lcores: "1-7"
+
+    memory_channels: 4
+
+    hugepages:
+      size_kb: 1048576
+      count: 8
+
+    ports:
+      - pci: "0000:41:00.0"
+        driver: vfio-pci
+      - pci: "0000:41:00.1"
+        driver: vfio-pci
+
+    nics:
+      - pci: "0000:41:00.0"
+        name: ens1f0
+        driver: ice
+      - pci: "0000:41:00.1"
+        name: ens1f1
+        driver: ice

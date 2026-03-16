@@ -1,0 +1,47 @@
+# runner.toml — machine-local runner configuration
+# Copy this file to runner.toml and fill in values for your environment.
+# runner.toml is gitignored; never commit host-specific paths or credentials.
+
+[paths]
+# Absolute path to the DPDK source tree (or the autosearch-dpdk repo root
+# if DPDK is a submodule that has been initialised)
+dpdk_src = "/opt/dpdk"
+
+# Absolute path to the DTS (DPDK Test Suite) installation directory
+dts_dir = "/opt/dts"
+
+# Directory where DPDK build artefacts are written.  Created automatically
+# if it does not exist.
+build_dir = "/tmp/dpdk-build"
+
+# Path to the Python interpreter inside the DTS virtualenv (or system Python
+# if DTS dependencies are installed globally)
+python = "/opt/dts/.venv/bin/python"
+
+[timeouts]
+# Minutes to wait for a full DPDK build before aborting
+build_minutes = 30
+
+# Minutes to wait for a complete DTS test run before aborting
+test_minutes = 60
+
+[git]
+# Remote name used when fetching/pushing DPDK patches
+remote = "origin"
+
+# Branch that patches are applied on top of
+base_branch = "main"
+
+# Temporary branch created for each campaign iteration.
+# The string "{iteration}" is replaced with the zero-padded iteration number.
+patch_branch = "autosearch/iter-{iteration}"
+
+[build]
+# Number of parallel make jobs.  0 means use all available CPU cores.
+jobs = 0
+
+# Meson cross-file to use when cross-compiling.  Leave empty for native builds.
+cross_file = ""
+
+# Additional meson setup arguments passed verbatim (space-separated)
+extra_meson_args = ""

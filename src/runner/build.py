@@ -1,0 +1,109 @@
+"""DPDK build orchestration for the runner."""
+
+from __future__ import annotations
+
+import logging
+import subprocess
+import time
+from dataclasses import dataclass
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class BuildResult:
+    """Result of a DPDK build attempt."""
+
+    success: bool
+    log: str
+    duration_seconds: float
+
+
+def _truncate_log(log: str, max_lines: int = 200) -> str:
+    """Keep only the last max_lines of a log string."""
+    lines = log.splitlines()
+    if len(lines) <= max_lines:
+        return log
+    return "\n".join(lines[-max_lines:])
+
+
+def build_dpdk(
+    source_path: Path,
+    commit: str,
+    build_dir: Path,
+    timeout: int = 1800,
+) -> BuildResult:
+    """Build DPDK from source at a given commit.
+
+    Args:
+        source_path: Path to the DPDK source tree.
+        commit: Git commit hash to check out.
+        build_dir: Directory for meson build artefacts.
+        timeout: Maximum seconds before the build is killed.
+
+    Returns:
+        A BuildResult with success status, build log, and duration.
+    """
+    start = time.monotonic()
+    combined_log: list[str] = []
+
+    try:
+        checkout = subprocess.run(
+            ["git", "-C", str(source_path), "checkout", commit],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        combined_log.append(checkout.stdout)
+        combined_log.append(checkout.stderr)
+        if checkout.returncode != 0:
+            duration = time.monotonic() - start
+            log = _truncate_log("\n".join(combined_log))
+            return BuildResult(success=False, log=log, duration_seconds=duration)
+
+        if build_dir.exists():
+            meson_cmd = ["meson", "setup", "--reconfigure", str(build_dir)]
+        else:
+            meson_cmd = ["meson", "setup", str(build_dir), str(source_path)]
+
+        meson = subprocess.run(
+            meson_cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        combined_log.append(meson.stdout)
+        combined_log.append(meson.stderr)
+        if meson.returncode != 0:
+            duration = time.monotonic() - start
+            log = _truncate_log("\n".join(combined_log))
+            return BuildResult(success=False, log=log, duration_seconds=duration)
+
+        remaining = max(10, timeout - int(time.monotonic() - start))
+        ninja = subprocess.run(
+            ["ninja", "-C", str(build_dir)],
+            capture_output=True,
+            text=True,
+            timeout=remaining,
+        )
+        combined_log.append(ninja.stdout)
+        combined_log.append(ninja.stderr)
+
+        duration = time.monotonic() - start
+        if ninja.returncode != 0:
+            log = _truncate_log("\n".join(combined_log))
+            return BuildResult(success=False, log=log, duration_seconds=duration)
+
+        return BuildResult(
+            success=True,
+            log="\n".join(combined_log),
+            duration_seconds=duration,
+        )
+
+    except subprocess.TimeoutExpired:
+        duration = time.monotonic() - start
+        combined_log.append(f"\n[BUILD TIMEOUT after {duration:.0f}s]")
+        log = _truncate_log("\n".join(combined_log))
+        logger.error("Build timed out after %.0fs", duration)
+        return BuildResult(success=False, log=log, duration_seconds=duration)
