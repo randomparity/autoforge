@@ -25,15 +25,17 @@ timeout_minutes = 60
 # Freeform description injected into the Claude prompt. Use this to specify
 # hardware, optimization strategy, constraints, or any other context.
 description = """
-Target: Intel E810 NIC (ice driver), Xeon Platinum, 2-socket NUMA.
-Focus on testpmd forwarding throughput with 64-byte packets.
-Strategies to explore: rx/tx burst sizing, prefetch tuning, cache-line
-alignment, vectorized PMD paths, DPDK EAL memory and lcore configuration.
-Constraints: do not change public API signatures.
+Target: Mellanox ConnectX-6 Dx / ConnectX-7 NIC (mlx5 PMD).
+Workload: testpmd in io-fwd mode, bi-directional 64-byte frames.
+Strategies to explore: rx/tx burst sizing, MPRQ (multi-packet RQ) tuning,
+vectorized datapath selection, prefetch and cache-line alignment in the
+mlx5 rx/tx burst functions, descriptor compression, inline packet
+thresholds, and LRO/TSO knob removal for small-packet workloads.
+Constraints: do not change public API signatures or break other PMDs.
 """
 
 [dpdk]
 # Path to the DPDK git submodule relative to repo root
 submodule_path = "dpdk"
 # Source paths the agent is allowed to modify (relative to submodule_path)
-scope = ["lib/", "drivers/net/", "app/test-pmd/"]
+scope = ["drivers/net/mlx5/", "drivers/common/mlx5/", "app/test-pmd/"]
