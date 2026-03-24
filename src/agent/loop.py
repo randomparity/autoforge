@@ -9,7 +9,14 @@ import sys
 import tomllib
 from pathlib import Path
 
-from src.agent.history import append_result, best_result, load_history
+from src.agent.history import (
+    append_failure,
+    append_result,
+    best_result,
+    format_failures,
+    load_failures,
+    load_history,
+)
 from src.agent.metric import compare_metric
 from src.agent.protocol import create_request, next_sequence, poll_for_completion
 from src.agent.strategy import format_context, validate_change
@@ -63,6 +70,57 @@ def git_add_commit_push(
     )
     if not dry_run:
         subprocess.run(["git", "push"], check=True, capture_output=True, text=True)
+
+
+def ensure_optimization_branch(dpdk_path: Path, branch: str) -> None:
+    """Create and check out the optimization branch if it doesn't exist."""
+    result = subprocess.run(
+        ["git", "-C", str(dpdk_path), "branch", "--list", branch],
+        capture_output=True,
+        text=True,
+    )
+    if not result.stdout.strip():
+        logger.info("Creating optimization branch %s in %s", branch, dpdk_path)
+        subprocess.run(
+            ["git", "-C", str(dpdk_path), "checkout", "-b", branch],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    else:
+        current = subprocess.run(
+            ["git", "-C", str(dpdk_path), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+        )
+        if current.stdout.strip() != branch:
+            subprocess.run(
+                ["git", "-C", str(dpdk_path), "checkout", branch],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+
+def get_diff_summary(dpdk_path: Path) -> str:
+    """Capture a short diff stat of the last commit vs its parent."""
+    result = subprocess.run(
+        ["git", "-C", str(dpdk_path), "diff", "--stat", "HEAD~1", "HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def revert_last_change(dpdk_path: Path) -> None:
+    """Reset the DPDK submodule to the previous commit."""
+    subprocess.run(
+        ["git", "-C", str(dpdk_path), "reset", "--hard", "HEAD~1"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    logger.info("Reverted DPDK submodule to %s", git_submodule_head(dpdk_path)[:12])
 
 
 def run_interactive_iteration(
@@ -134,14 +192,23 @@ def run_interactive_iteration(
 
     current_best = best_result(direction=direction)
     best_val = float(current_best["metric_value"]) if current_best is not None else None
-    if best_val is not None and metric is not None:
-        if compare_metric(metric, best_val, direction):
-            print(f"Improvement! {best_val} -> {metric}")
-        else:
-            print(f"No improvement ({metric} vs best {best_val}). Consider reverting.")
+    improved = best_val is None or (
+        metric is not None and compare_metric(metric, best_val, direction)
+    )
 
     append_result(seq, commit, metric, "completed", description)
-    git_add_commit_push(["results.tsv"], f"results: iteration {seq:04d}", dry_run=dry_run)
+
+    if improved:
+        print(f"Improvement! {best_val} -> {metric}" if best_val else f"Baseline: {metric}")
+        files_to_commit = ["results.tsv", str(dpdk_path)]
+        git_add_commit_push(files_to_commit, f"results: iteration {seq:04d}", dry_run=dry_run)
+    else:
+        print(f"No improvement ({metric} vs best {best_val}). Reverting change.")
+        diff_summary = get_diff_summary(dpdk_path)
+        revert_last_change(dpdk_path)
+        append_failure(commit, metric, description, diff_summary)
+        files_to_commit = ["results.tsv", "failures.tsv", str(dpdk_path)]
+        git_add_commit_push(files_to_commit, f"revert: iteration {seq:04d}", dry_run=dry_run)
 
     if _below_threshold(metric, best_val, campaign):
         threshold = campaign["metric"]["threshold"]
@@ -192,6 +259,8 @@ def main() -> None:
 
     campaign = load_campaign(Path(args.campaign))
     dpdk_path = Path(campaign.get("dpdk", {}).get("submodule_path", "dpdk"))
+    opt_branch = campaign.get("dpdk", {}).get("optimization_branch", "autosearch/optimize")
+    ensure_optimization_branch(dpdk_path, opt_branch)
 
     if args.autonomous:
         run_autonomous(campaign, dpdk_path, args.dry_run, args.provider)
@@ -256,15 +325,20 @@ def run_autonomous(
 
     for _ in range(max_iter):
         history = load_history()
+        failures = load_failures()
         context = format_context(history, campaign)
 
         goal = campaign.get("goal", {}).get("description", "").strip()
         goal_block = f"\nGoal:\n{goal}\n" if goal else ""
 
+        failures_block = format_failures(failures)
+        failures_section = f"\n{failures_block}\n" if failures_block else ""
+
         prompt = (
             f"You are optimizing DPDK for maximum throughput.\n"
             f"{goal_block}\n"
-            f"Current state:\n{context}\n\n"
+            f"Current state:\n{context}\n"
+            f"{failures_section}\n"
             f"Propose a specific code change to the DPDK source in {dpdk_path}. "
             f"Focus on the scoped areas. Describe the change and the file(s) to modify."
         )
@@ -314,9 +388,23 @@ def run_autonomous(
         direction = campaign.get("metric", {}).get("direction", "maximize")
         prev_best = best_result(direction=direction)
         prev_val = float(prev_best["metric_value"]) if prev_best is not None else None
+        improved = prev_val is None or (
+            metric is not None and compare_metric(metric, prev_val, direction)
+        )
 
         append_result(seq, commit, metric, result.status, description)
-        git_add_commit_push(["results.tsv"], f"results: iteration {seq:04d}", dry_run=dry_run)
+
+        if improved:
+            print(f"Improvement! {prev_val} -> {metric}" if prev_val else f"Baseline: {metric}")
+            files = ["results.tsv", str(dpdk_path)]
+            git_add_commit_push(files, f"results: iteration {seq:04d}", dry_run=dry_run)
+        else:
+            print(f"No improvement ({metric} vs best {prev_val}). Reverting.")
+            diff_summary = get_diff_summary(dpdk_path)
+            revert_last_change(dpdk_path)
+            append_failure(commit, metric, description, diff_summary)
+            files = ["results.tsv", "failures.tsv", str(dpdk_path)]
+            git_add_commit_push(files, f"revert: iteration {seq:04d}", dry_run=dry_run)
 
         if _below_threshold(metric, prev_val, campaign):
             threshold = campaign["metric"]["threshold"]
