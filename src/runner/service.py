@@ -161,7 +161,7 @@ def process_request(request: TestRequest, request_path: Path, config: dict) -> N
         results_summary = testpmd_result.port_stats
         metric_value = testpmd_result.throughput_mpps
 
-    update_status(
+    pushed = update_status(
         request,
         STATUS_COMPLETED,
         request_path,
@@ -170,6 +170,11 @@ def process_request(request: TestRequest, request_path: Path, config: dict) -> N
         metric_value=metric_value,
         completed_at=datetime.now(timezone.utc).isoformat(),
     )
+    if not pushed:
+        logger.error(
+            "Results for request %04d written locally but not pushed",
+            request.sequence,
+        )
 
 
 def main() -> None:
