@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -120,6 +121,30 @@ def _record_result_or_revert(
     return improved
 
 
+def _extract_profile_summary(result: object) -> dict | None:
+    """Extract profiling summary from a completed test result.
+
+    Args:
+        result: TestRequest with results_json field.
+
+    Returns:
+        Profile summary dict, or None if not available.
+    """
+    raw = getattr(result, "results_json", None)
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    elif isinstance(raw, dict):
+        data = raw
+    else:
+        return None
+    return data.get("profiling")
+
+
 def run_autonomous(
     campaign: CampaignConfig,
     dpdk_path: Path,
@@ -137,10 +162,13 @@ def run_autonomous(
     client, model = create_api_client(provider)
     max_iter = campaign.get("campaign", {}).get("max_iterations", 50)
 
+    last_profile_summary = None
     for _ in range(max_iter):
         history = load_history()
         failures = load_failures()
-        context = format_context(history, campaign)
+        context = format_context(
+            history, campaign, profile_summary=last_profile_summary,
+        )
 
         goal = campaign.get("goal", {}).get("description", "").strip()
         goal_block = f"\nGoal:\n{goal}\n" if goal else ""
@@ -205,6 +233,9 @@ def run_autonomous(
         metric = (
             result.metric_value if result.status == "completed" else None
         )
+
+        # Extract profiling data for next iteration's context
+        last_profile_summary = _extract_profile_summary(result)
         direction = campaign.get("metric", {}).get("direction", "maximize")
         prev_best = best_result(direction=direction)
         prev_val = (

@@ -110,6 +110,16 @@ def run_interactive_iteration(
     metric = result.metric_value
     print(f"Request {seq:04d} completed. Metric: {metric}")
 
+    # Display profiling summary if available
+    from src.agent.autonomous import _extract_profile_summary
+
+    profile_summary = _extract_profile_summary(result)
+    if profile_summary:
+        from src.agent.strategy import _format_profile_lines
+
+        for line in _format_profile_lines(profile_summary):
+            print(line)
+
     current_best = best_result(direction=direction)
     best_val = (
         float(current_best["metric_value"])

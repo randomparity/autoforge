@@ -11,3 +11,4 @@ config/nodes.yaml
 config/test_run.yaml
 .env
 .desloppify/
+perf/results/

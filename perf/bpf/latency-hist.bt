@@ -1,0 +1,28 @@
+#!/usr/bin/env bpftrace
+//
+// Per-function latency histogram.
+// Usage: FUNC=rte_eth_rx_burst BINARY=/path/to/testpmd bpftrace latency-hist.bt
+//
+// Bimodal distributions often indicate NUMA effects, contention, or
+// interrupt interference on polling threads.
+
+uprobe:$BINARY:$FUNC
+{
+    @start[tid] = nsecs;
+}
+
+uretprobe:$BINARY:$FUNC
+/@start[tid]/
+{
+    @latency_ns = hist(nsecs - @start[tid]);
+    @call_count = count();
+    delete(@start[tid]);
+}
+
+END
+{
+    printf("\n--- Latency histogram for %s ---\n", str($FUNC));
+    print(@latency_ns);
+    printf("Total calls: ");
+    print(@call_count);
+}

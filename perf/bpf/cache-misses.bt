@@ -1,0 +1,17 @@
+#!/usr/bin/env bpftrace
+//
+// Cache miss stack annotation.
+// Usage: bpftrace -p <PID> cache-misses.bt
+//
+// Produces folded cache-miss stacks that can be overlaid with CPU
+// flame graphs to see which hot functions are hot because of cache
+// misses versus pure computation.
+//
+// Requires hardware PMU tracepoint support. Falls back to software
+// event if hardware is unavailable.
+
+hardware:cache-misses:1000
+/pid == $target/
+{
+    @cache_miss_stacks[ustack] = count();
+}

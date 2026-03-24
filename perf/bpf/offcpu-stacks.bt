@@ -1,0 +1,24 @@
+#!/usr/bin/env bpftrace
+//
+// Off-CPU stack trace capture.
+// Usage: bpftrace -p <PID> offcpu-stacks.bt
+//
+// For DPDK poll-mode this should show almost nothing. If it does,
+// it reveals unexpected blocking (locks, syscalls, page faults).
+// Output can be folded and fed to flamegraph.pl --color=io --countname=us.
+
+tracepoint:sched:sched_switch
+/pid == $target/
+{
+    @block_start[tid] = nsecs;
+    @block_stack[tid] = ustack;
+}
+
+tracepoint:sched:sched_wakeup
+/@block_start[args->pid]/
+{
+    $duration = nsecs - @block_start[args->pid];
+    @offcpu[@block_stack[args->pid]] = sum($duration);
+    delete(@block_start[args->pid]);
+    delete(@block_stack[args->pid]);
+}

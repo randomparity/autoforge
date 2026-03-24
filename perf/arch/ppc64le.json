@@ -1,0 +1,57 @@
+{
+  "arch": "ppc64le",
+  "kernel_min": "5.4",
+  "pmu_driver": "power9_pmu / power10_pmu",
+  "events": {
+    "cycles": "PM_RUN_CYC",
+    "instructions": "PM_RUN_INST_CMPL",
+    "l1d_miss": "PM_LD_MISS_L1",
+    "l3_miss": "PM_DATA_FROM_L3MISS",
+    "branch_miss": "PM_BR_MPRED_CMPL",
+    "stalled_frontend": "PM_NO_INST_AVAIL",
+    "stalled_backend": "PM_CMPLU_STALL"
+  },
+  "derived_metrics": {
+    "ipc": "instructions / cycles",
+    "l1d_miss_rate": "l1d_miss / instructions",
+    "l3_miss_rate": "l3_miss / instructions",
+    "branch_miss_rate": "branch_miss / instructions",
+    "frontend_bound": "stalled_frontend / cycles",
+    "backend_bound": "stalled_backend / cycles"
+  },
+  "heuristics": [
+    {
+      "condition": "ipc < 1.0",
+      "diagnosis": "Pipeline underutilized. Check for cache misses, branch mispredictions, or long-latency instructions.",
+      "suggestions": [
+        "Inspect l1d_miss_rate and l3_miss — high values indicate working set exceeds cache.",
+        "Check for unaligned memory accesses (expensive on POWER).",
+        "Verify VSX/AltiVec SIMD paths are used in hot loops rather than scalar fallbacks."
+      ]
+    },
+    {
+      "condition": "l1d_miss_rate > 0.05",
+      "diagnosis": "Significant L1 data cache pressure.",
+      "suggestions": [
+        "Review data structure layout for cache line alignment (128B on POWER).",
+        "Consider prefetch hints (dcbt on POWER).",
+        "Check NUMA locality — ensure memory is local to the executing core."
+      ]
+    },
+    {
+      "condition": "backend_bound > 0.4",
+      "diagnosis": "Execution stalled on backend (memory, divides, long-latency ops).",
+      "suggestions": [
+        "Cross-reference with cache miss data.",
+        "Look for division or modulo in hot paths — replace with shifts/masks where possible.",
+        "Check for false sharing on shared data structures (128B cache lines on POWER)."
+      ]
+    }
+  ],
+  "notes": [
+    "PM_RUN_* events count only non-idle, non-stolen cycles/instructions — preferred over raw counters for accuracy in shared/virtualized environments.",
+    "POWER9/10 supports simultaneous counting of up to 6 PMU events per group. Plan event groups to avoid multiplexing.",
+    "Cache lines are 128 bytes on POWER (vs 64B on x86). Alignment matters more.",
+    "For DPDK: verify rte_memcpy uses the POWER-optimized (AltiVec) variant at compile time. Check RTE_ARCH_PPC_64 ifdefs."
+  ]
+}

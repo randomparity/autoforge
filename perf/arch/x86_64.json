@@ -1,0 +1,66 @@
+{
+  "arch": "x86_64",
+  "kernel_min": "4.1",
+  "pmu_driver": "various (use generic events as fallback)",
+  "events": {
+    "cycles": "cycles",
+    "instructions": "instructions",
+    "l1d_miss": "L1-dcache-load-misses",
+    "llc_miss": "LLC-load-misses",
+    "branch_miss": "branch-misses",
+    "stalled_frontend": "stalled-cycles-frontend",
+    "stalled_backend": "stalled-cycles-backend"
+  },
+  "derived_metrics": {
+    "ipc": "instructions / cycles",
+    "l1d_miss_rate": "l1d_miss / instructions",
+    "llc_miss_rate": "llc_miss / instructions",
+    "branch_miss_rate": "branch_miss / instructions",
+    "frontend_bound": "stalled_frontend / cycles",
+    "backend_bound": "stalled_backend / cycles"
+  },
+  "heuristics": [
+    {
+      "condition": "ipc < 1.0",
+      "diagnosis": "Pipeline underutilized. Check for cache misses, branch mispredictions, or memory stalls.",
+      "suggestions": [
+        "Inspect l1d_miss_rate and llc_miss_rate for cache pressure.",
+        "Check for AVX-512 downclocking if using heavy SIMD paths.",
+        "Verify prefetch hints in hot loops (rte_prefetch0/1/2)."
+      ]
+    },
+    {
+      "condition": "l1d_miss_rate > 0.05",
+      "diagnosis": "Significant L1 data cache pressure.",
+      "suggestions": [
+        "Review data structure layout for cache line alignment (64B).",
+        "Consider software prefetching in packet processing loops.",
+        "Check for false sharing on per-core data structures."
+      ]
+    },
+    {
+      "condition": "backend_bound > 0.4",
+      "diagnosis": "Execution stalled on backend (memory, divides, long-latency ops).",
+      "suggestions": [
+        "Cross-reference with LLC miss data.",
+        "Look for division/modulo in hot paths — replace with shifts/masks.",
+        "Check NUMA locality of hugepage allocations."
+      ]
+    },
+    {
+      "condition": "branch_miss_rate > 0.02",
+      "diagnosis": "High branch misprediction rate.",
+      "suggestions": [
+        "Use branchless techniques (cmov, bitwise ops) in hot paths.",
+        "Check for unpredictable branches in packet classification.",
+        "Consider __builtin_expect hints for likely/unlikely branches."
+      ]
+    }
+  ],
+  "notes": [
+    "Use generic events (cycles, instructions) as fallback for unknown CPU models.",
+    "PEBS (Precise Event-Based Sampling) available on Intel for precise sampling.",
+    "Watch for AVX-512 frequency throttling when profiling SIMD-heavy code.",
+    "For DPDK: verify rte_memcpy uses the SSE/AVX-optimized variant at compile time."
+  ]
+}

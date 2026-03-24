@@ -1,0 +1,34 @@
+{
+  "arch": "s390x",
+  "kernel_min": "5.2",
+  "pmu_driver": "cpum_cf / cpum_sf",
+  "events": {
+    "cycles": "cycles",
+    "instructions": "instructions",
+    "l1d_miss": "L1D_RO_EXCL_WRITES",
+    "branch_miss": "branch-misses",
+    "stalled_backend": "CPU_CYCLES:u"
+  },
+  "derived_metrics": {
+    "ipc": "instructions / cycles",
+    "l1d_miss_rate": "l1d_miss / instructions",
+    "branch_miss_rate": "branch_miss / instructions"
+  },
+  "heuristics": [
+    {
+      "condition": "ipc < 1.0",
+      "diagnosis": "Pipeline underutilized.",
+      "suggestions": [
+        "Check cache miss rates.",
+        "Verify vectorized paths are active where available.",
+        "Review memory access patterns for NUMA effects."
+      ]
+    }
+  ],
+  "notes": [
+    "s390x uses cpum_cf (counter facility) and cpum_sf (sampling facility) for profiling.",
+    "Sampling facility (cpum_sf) required for call stack capture — may need kernel config.",
+    "Limited perf event support in older kernels; verify available events with `perf list`.",
+    "For DPDK: s390x support is more limited; check which PMDs are available."
+  ]
+}
