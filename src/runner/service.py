@@ -1,4 +1,4 @@
-"""Runner service main loop — polls for requests, builds DPDK, runs DTS."""
+"""Runner service main loop — polls for requests, builds DPDK, runs tests."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from src.protocol.schema import (
     TestRequest,
 )
 from src.runner.build import build_dpdk
+from src.runner.execute import run_dts
 from src.runner.protocol import (
     DEFAULT_REQUESTS_DIR,
     claim,
@@ -124,27 +125,48 @@ def process_request(request: TestRequest, request_path: Path, config: dict) -> N
 
     update_status(request, STATUS_RUNNING, request_path)
 
-    testpmd_result = run_testpmd(
-        build_dir=build_dir,
-        config=config,
-        timeout=test_timeout,
-    )
+    backend = getattr(request, "backend", "testpmd")
 
-    if not testpmd_result.success:
-        fail(
-            request,
-            request_path,
-            error=testpmd_result.error or "testpmd failed",
+    if backend == "dts":
+        dts_path = Path(paths.get("dts_dir", "/opt/dts"))
+        dts_result = run_dts(
+            dts_path=dts_path,
+            config=config,
+            suites=request.test_suites,
+            perf=request.perf,
+            metric_path=request.metric_path,
+            timeout=test_timeout,
         )
-        return
+        if not dts_result.success:
+            fail(request, request_path, error=dts_result.error or "DTS failed")
+            return
+        results_json = dts_result.results_json
+        results_summary = dts_result.results_summary
+        metric_value = dts_result.metric_value
+    else:
+        testpmd_result = run_testpmd(
+            build_dir=build_dir,
+            config=config,
+            timeout=test_timeout,
+        )
+        if not testpmd_result.success:
+            fail(
+                request,
+                request_path,
+                error=testpmd_result.error or "testpmd failed",
+            )
+            return
+        results_json = {"throughput_mpps": testpmd_result.throughput_mpps}
+        results_summary = testpmd_result.port_stats
+        metric_value = testpmd_result.throughput_mpps
 
     update_status(
         request,
         STATUS_COMPLETED,
         request_path,
-        results_json={"throughput_mpps": testpmd_result.throughput_mpps},
-        results_summary=testpmd_result.port_stats,
-        metric_value=testpmd_result.throughput_mpps,
+        results_json=results_json,
+        results_summary=results_summary,
+        metric_value=metric_value,
         completed_at=datetime.now(timezone.utc).isoformat(),
     )
 
