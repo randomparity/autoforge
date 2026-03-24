@@ -151,6 +151,12 @@ def main() -> None:
         action="store_true",
         help="Use Claude API for automated change proposals",
     )
+    parser.add_argument(
+        "--provider",
+        choices=["anthropic", "openrouter"],
+        default="anthropic",
+        help="API provider for autonomous mode (default: anthropic)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -163,7 +169,7 @@ def main() -> None:
     dpdk_path = Path(campaign.get("dpdk", {}).get("submodule_path", "dpdk"))
 
     if args.autonomous:
-        run_autonomous(campaign, dpdk_path, args.dry_run)
+        run_autonomous(campaign, dpdk_path, args.dry_run, args.provider)
     else:
         while run_interactive_iteration(campaign, dpdk_path, args.dry_run):
             pass
@@ -171,13 +177,14 @@ def main() -> None:
     print("Optimization loop finished.")
 
 
-def run_autonomous(campaign: dict, dpdk_path: Path, dry_run: bool) -> None:
-    """Run the autonomous optimization loop using the Claude API.
+def build_client(provider: str) -> tuple:
+    """Build an Anthropic-compatible API client and model ID.
 
     Args:
-        campaign: Parsed campaign configuration.
-        dpdk_path: Path to the DPDK submodule.
-        dry_run: If True, skip git push operations.
+        provider: "anthropic" or "openrouter".
+
+    Returns:
+        (client, model_id) tuple.
     """
     try:
         import anthropic
@@ -186,7 +193,40 @@ def run_autonomous(campaign: dict, dpdk_path: Path, dry_run: bool) -> None:
         print("Install with: uv add anthropic")
         sys.exit(1)
 
-    client = anthropic.Anthropic()
+    if provider == "openrouter":
+        import os
+
+        api_key = os.environ.get("OPENROUTER_API_KEY")
+        if not api_key:
+            print("Error: OPENROUTER_API_KEY environment variable required.")
+            sys.exit(1)
+        client = anthropic.Anthropic(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,
+        )
+        model = "anthropic/claude-opus-4-6"
+    else:
+        client = anthropic.Anthropic()
+        model = "claude-opus-4-6"
+
+    return client, model
+
+
+def run_autonomous(
+    campaign: dict,
+    dpdk_path: Path,
+    dry_run: bool,
+    provider: str = "anthropic",
+) -> None:
+    """Run the autonomous optimization loop using the Claude API.
+
+    Args:
+        campaign: Parsed campaign configuration.
+        dpdk_path: Path to the DPDK submodule.
+        dry_run: If True, skip git push operations.
+        provider: API provider ("anthropic" or "openrouter").
+    """
+    client, model = build_client(provider)
     max_iter = campaign.get("campaign", {}).get("max_iterations", 50)
 
     for _ in range(max_iter):
@@ -201,7 +241,7 @@ def run_autonomous(campaign: dict, dpdk_path: Path, dry_run: bool) -> None:
         )
 
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=model,
             max_tokens=4096,
             messages=[{"role": "user", "content": prompt}],
         )
