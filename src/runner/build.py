@@ -68,9 +68,18 @@ def build_dpdk(
             log = _truncate_log("\n".join(combined_log))
             return BuildResult(success=False, log=log, duration_seconds=duration)
 
-        if build_dir.exists():
-            meson_cmd = ["meson", "setup", "--reconfigure", str(build_dir)]
+        meson_configured = (build_dir / "meson-private" / "build.dat").exists()
+        if meson_configured:
+            meson_cmd = [
+                "meson", "setup", "--reconfigure",
+                str(build_dir), str(source_path),
+            ]
         else:
+            if build_dir.exists():
+                import shutil
+
+                shutil.rmtree(build_dir)
+                logger.info("Removed stale build dir %s", build_dir)
             meson_cmd = ["meson", "setup", str(build_dir), str(source_path)]
 
         cross_file = cfg.get("cross_file", "")
