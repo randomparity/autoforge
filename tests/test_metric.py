@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.agent.metric import compare_metric, extract_metric
+from src.agent.metric import compare_metric
+from src.protocol import extract_metric
 
 SAMPLE_DTS_RESULT = {
     "test_runs": [

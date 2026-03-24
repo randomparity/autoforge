@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
-import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 import tomllib
 
-from src.protocol.schema import (
+from src.logging_config import setup_logging
+from src.protocol import (
+    DEFAULT_REQUESTS_DIR,
     STATUS_BUILDING,
     STATUS_CLAIMED,
     STATUS_COMPLETED,
@@ -21,7 +23,6 @@ from src.protocol.schema import (
 from src.runner.build import build_dpdk
 from src.runner.execute import run_dts
 from src.runner.protocol import (
-    DEFAULT_REQUESTS_DIR,
     claim,
     fail,
     find_pending,
@@ -42,8 +43,6 @@ def load_config(path: str | None = None) -> dict:
     Returns:
         Parsed configuration dictionary.
     """
-    import os
-
     config_path = path or os.environ.get("AUTOSEARCH_CONFIG", "config/runner.toml")
     with open(config_path, "rb") as f:
         return tomllib.load(f)
@@ -83,6 +82,7 @@ def _git_pull() -> bool:
         ["git", "pull", "--rebase"],
         capture_output=True,
         text=True,
+        timeout=60,
     )
     if result.returncode != 0:
         logger.error("git pull --rebase failed: %s", result.stderr.strip())
@@ -90,7 +90,7 @@ def _git_pull() -> bool:
     return True
 
 
-def process_request(request: TestRequest, request_path: Path, config: dict) -> None:
+def execute_request(request: TestRequest, request_path: Path, config: dict) -> None:
     """Process a single test request through build and test phases.
 
     Args:
@@ -105,7 +105,15 @@ def process_request(request: TestRequest, request_path: Path, config: dict) -> N
     build_timeout = int(timeouts.get("build_minutes", 30)) * 60
     test_timeout = int(timeouts.get("test_minutes", 10)) * 60
 
+    logger.info(
+        "Processing request %04d: commit=%s backend=%s",
+        request.sequence,
+        request.dpdk_commit[:12],
+        getattr(request, "backend", "testpmd"),
+    )
+
     update_status(request, STATUS_BUILDING, request_path)
+    logger.info("Building DPDK at %s in %s", request.dpdk_commit[:12], build_dir)
 
     build_result = build_dpdk(
         source_path=source_path,
@@ -115,7 +123,14 @@ def process_request(request: TestRequest, request_path: Path, config: dict) -> N
         build_config=config.get("build", {}),
     )
 
+    logger.info(
+        "Build %s in %.1fs",
+        "succeeded" if build_result.success else "FAILED",
+        build_result.duration_seconds,
+    )
+
     if not build_result.success:
+        logger.error("Build failed, last output:\n%s", build_result.log[-500:])
         fail(
             request,
             request_path,
@@ -130,33 +145,42 @@ def process_request(request: TestRequest, request_path: Path, config: dict) -> N
 
     if backend == "dts":
         dts_path = Path(paths.get("dts_dir", "/opt/dts"))
+        logger.info("Running DTS at %s", dts_path)
         dts_result = run_dts(
             dts_path=dts_path,
-            config=config,
             suites=request.test_suites,
             perf=request.perf,
             metric_path=request.metric_path,
             timeout=test_timeout,
         )
         if not dts_result.success:
+            logger.error("DTS failed: %s", dts_result.error)
             fail(request, request_path, error=dts_result.error or "DTS failed")
             return
+        logger.info("DTS completed in %.1fs", dts_result.duration_seconds)
         results_json = dts_result.results_json
         results_summary = dts_result.results_summary
         metric_value = dts_result.metric_value
     else:
+        logger.info("Running testpmd measurement")
         testpmd_result = run_testpmd(
             build_dir=build_dir,
             config=config,
             timeout=test_timeout,
         )
         if not testpmd_result.success:
+            logger.error("testpmd failed: %s", testpmd_result.error)
             fail(
                 request,
                 request_path,
                 error=testpmd_result.error or "testpmd failed",
             )
             return
+        logger.info(
+            "testpmd completed in %.1fs, throughput=%.4f Mpps",
+            testpmd_result.duration_seconds,
+            testpmd_result.throughput_mpps or 0,
+        )
         results_json = {"throughput_mpps": testpmd_result.throughput_mpps}
         results_summary = testpmd_result.port_stats
         metric_value = testpmd_result.throughput_mpps
@@ -175,18 +199,21 @@ def process_request(request: TestRequest, request_path: Path, config: dict) -> N
             "Results for request %04d written locally but not pushed",
             request.sequence,
         )
+    else:
+        logger.info("Request %04d completed successfully", request.sequence)
 
 
 def main() -> None:
     """Runner service entry point."""
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        stream=sys.stdout,
+    config = load_config()
+    runner_cfg = config.get("runner", {})
+
+    setup_logging(
+        level_name=runner_cfg.get("log_level"),
+        log_file=runner_cfg.get("log_file"),
     )
 
-    config = load_config()
-    poll_interval = int(config.get("runner", {}).get("poll_interval", 30))
+    poll_interval = int(runner_cfg.get("poll_interval", 30))
     requests_dir = DEFAULT_REQUESTS_DIR
 
     logger.info("Runner starting, poll_interval=%ds", poll_interval)
@@ -210,11 +237,13 @@ def main() -> None:
 
             logger.info("Found pending request %04d: %s", request.sequence, request.description)
 
+            logger.info("Claiming request %04d", request.sequence)
             if not claim(request, request_path):
                 logger.error("Failed to claim request %04d, skipping", request.sequence)
                 continue
 
-            process_request(request, request_path, config)
+            logger.info("Claimed request %04d, starting processing", request.sequence)
+            execute_request(request, request_path, config)
 
     except KeyboardInterrupt:
         logger.info("Runner stopped by user")

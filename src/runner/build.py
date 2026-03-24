@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import subprocess
 import time
 from dataclasses import dataclass
@@ -53,6 +54,7 @@ def build_dpdk(
     combined_log: list[str] = []
 
     try:
+        logger.info("Checking out commit %s in %s", commit[:12], source_path)
         checkout = subprocess.run(
             ["git", "-C", str(source_path), "checkout", commit],
             capture_output=True,
@@ -62,13 +64,21 @@ def build_dpdk(
         combined_log.append(checkout.stdout)
         combined_log.append(checkout.stderr)
         if checkout.returncode != 0:
+            logger.error("Git checkout failed: %s", checkout.stderr.strip())
             duration = time.monotonic() - start
             log = _truncate_log("\n".join(combined_log))
             return BuildResult(success=False, log=log, duration_seconds=duration)
 
-        if build_dir.exists():
-            meson_cmd = ["meson", "setup", "--reconfigure", str(build_dir)]
+        meson_configured = (build_dir / "meson-private" / "build.dat").exists()
+        if meson_configured:
+            meson_cmd = [
+                "meson", "setup", "--reconfigure",
+                str(build_dir), str(source_path),
+            ]
         else:
+            if build_dir.exists():
+                shutil.rmtree(build_dir)
+                logger.info("Removed stale build dir %s", build_dir)
             meson_cmd = ["meson", "setup", str(build_dir), str(source_path)]
 
         cross_file = cfg.get("cross_file", "")
@@ -79,6 +89,7 @@ def build_dpdk(
         if extra_args:
             meson_cmd.extend(extra_args.split())
 
+        logger.info("Running meson: %s", " ".join(meson_cmd))
         meson = subprocess.run(
             meson_cmd,
             capture_output=True,
@@ -88,6 +99,7 @@ def build_dpdk(
         combined_log.append(meson.stdout)
         combined_log.append(meson.stderr)
         if meson.returncode != 0:
+            logger.error("Meson setup failed (exit %d)", meson.returncode)
             duration = time.monotonic() - start
             log = _truncate_log("\n".join(combined_log))
             return BuildResult(success=False, log=log, duration_seconds=duration)
@@ -98,6 +110,7 @@ def build_dpdk(
         if jobs > 0:
             ninja_cmd.extend(["-j", str(jobs)])
 
+        logger.info("Running ninja: %s", " ".join(ninja_cmd))
         ninja = subprocess.run(
             ninja_cmd,
             capture_output=True,
@@ -109,9 +122,11 @@ def build_dpdk(
 
         duration = time.monotonic() - start
         if ninja.returncode != 0:
+            logger.error("Ninja build failed (exit %d)", ninja.returncode)
             log = _truncate_log("\n".join(combined_log))
             return BuildResult(success=False, log=log, duration_seconds=duration)
 
+        logger.info("Build succeeded in %.1fs", duration)
         return BuildResult(
             success=True,
             log="\n".join(combined_log),

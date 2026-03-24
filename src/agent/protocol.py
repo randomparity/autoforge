@@ -8,11 +8,9 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.protocol.schema import TestRequest
+from src.protocol import DEFAULT_REQUESTS_DIR, TestRequest
 
 logger = logging.getLogger(__name__)
-
-DEFAULT_REQUESTS_DIR = Path("requests")
 
 
 def next_sequence(requests_dir: Path | None = None) -> int:
@@ -47,7 +45,8 @@ def create_request(
     Args:
         seq: Sequence number for this iteration.
         commit: DPDK submodule commit SHA.
-        campaign: Campaign configuration dict (must have 'metric' and 'dts' keys).
+        campaign: Campaign configuration dict (must have a 'metric' key;
+            optionally has 'test' or 'dts' sub-keys for test configuration).
         description: Human-readable description of the change.
         requests_dir: Directory to write the request file into.
 
@@ -58,7 +57,7 @@ def create_request(
     directory.mkdir(parents=True, exist_ok=True)
 
     metric = campaign["metric"]
-    test_cfg = campaign.get("test", campaign.get("dts", {}))
+    test_cfg = campaign.get("test", {})
 
     request = TestRequest(
         sequence=seq,
@@ -77,11 +76,6 @@ def create_request(
     request.write(path)
     logger.info("Created request %04d at %s", seq, path)
     return path
-
-
-def read_request(path: Path) -> TestRequest:
-    """Read and deserialize a test request from a JSON file."""
-    return TestRequest.read(path)
 
 
 def find_latest_request(requests_dir: Path | None = None) -> TestRequest | None:
@@ -135,11 +129,14 @@ def poll_for_completion(
     deadline = time.monotonic() + timeout
 
     while time.monotonic() < deadline:
-        subprocess.run(
+        pull_result = subprocess.run(
             ["git", "pull", "--rebase"],
             capture_output=True,
             text=True,
+            timeout=60,
         )
+        if pull_result.returncode != 0:
+            logger.warning("git pull --rebase failed: %s", pull_result.stderr.strip())
 
         matches = list(directory.glob(f"{seq:04d}_*.json"))
         if not matches:

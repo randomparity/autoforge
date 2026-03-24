@@ -9,10 +9,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from src.agent.campaign import CampaignConfig
+
 logger = logging.getLogger(__name__)
 
 
-def format_context(history: list[dict], campaign: dict) -> str:
+def format_context(history: list[dict], campaign: CampaignConfig) -> str:
     """Build a prompt-friendly summary of campaign state and history.
 
     Args:
@@ -42,9 +44,8 @@ def format_context(history: list[dict], campaign: dict) -> str:
 
     scored = _scored_rows(history)
     if scored:
-        best_val, best_row = max(scored, key=lambda x: x[0])
-        if metric_cfg.get("direction") == "minimize":
-            best_val, best_row = min(scored, key=lambda x: x[0])
+        selector = min if metric_cfg.get("direction") == "minimize" else max
+        best_val, best_row = selector(scored, key=lambda x: x[0])
         lines.append(f"Best so far: {best_val} ({best_row.get('description', '?')})")
     else:
         lines.append("No successful iterations yet.")
@@ -76,40 +77,20 @@ def _scored_rows(history: list[dict]) -> list[tuple[float, dict]]:
 
 
 def validate_change(dpdk_path: Path) -> bool:
-    """Check whether the DPDK submodule has a new commit staged or committed.
-
-    Runs `git -C <dpdk_path> diff --cached --stat` to check for staged changes,
-    and `git -C <dpdk_path> log -1 --oneline` to confirm a commit exists.
+    """Check whether the DPDK submodule pointer differs from the outer repo.
 
     Args:
         dpdk_path: Path to the DPDK submodule directory.
 
     Returns:
-        True if the submodule has a new commit vs what the outer repo tracks.
+        True if the outer repo's submodule pointer has changed (i.e. the
+        submodule has a different commit than what is currently tracked).
     """
-    diff_result = subprocess.run(
-        ["git", "-C", str(dpdk_path), "diff", "--cached", "--stat"],
-        capture_output=True,
-        text=True,
-    )
-    log_result = subprocess.run(
-        ["git", "-C", str(dpdk_path), "log", "-1", "--oneline"],
-        capture_output=True,
-        text=True,
-    )
-
-    has_staged = bool(diff_result.stdout.strip())
-    has_commit = bool(log_result.stdout.strip())
-
-    if not has_staged and not has_commit:
-        logger.warning("No submodule change detected in %s", dpdk_path)
-        return False
-
-    # Check if submodule pointer changed in the outer repo
     outer_diff = subprocess.run(
         ["git", "diff", "--submodule=short", "--", str(dpdk_path)],
         capture_output=True,
         text=True,
+        timeout=30,
     )
     has_change = bool(outer_diff.stdout.strip())
     if not has_change:

@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import json
 
-from src.agent.protocol import create_request, find_latest_request, next_sequence, read_request
-from src.protocol.schema import STATUS_PENDING
+from src.agent.protocol import create_request, find_latest_request, next_sequence
+from src.protocol import STATUS_PENDING, TestRequest
 
 SAMPLE_CAMPAIGN = {
     "metric": {
         "name": "throughput_mpps",
         "path": "test_runs.0.test_suites.0.test_cases.0.throughput_mpps",
     },
-    "dts": {
+    "test": {
         "test_suites": ["TestPmd"],
         "perf": True,
     },
@@ -83,7 +83,7 @@ class TestReadRequest:
             description="Test",
             requests_dir=tmp_path,
         )
-        req = read_request(path)
+        req = TestRequest.read(path)
         assert req.sequence == 1
         assert req.dpdk_commit == "abc123"
 

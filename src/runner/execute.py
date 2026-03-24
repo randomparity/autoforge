@@ -9,6 +9,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.protocol import extract_metric
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,34 +26,8 @@ class DtsResult:
     duration_seconds: float
 
 
-def _extract_metric_value(data: dict, path: str) -> float | None:
-    """Extract a numeric value from nested dict using dot-notation path.
-
-    Args:
-        data: The JSON results dictionary.
-        path: Dot-separated key path (e.g. 'results.throughput.avg').
-
-    Returns:
-        The extracted float value, or None if the path is invalid.
-    """
-    current = data
-    for key in path.split("."):
-        if isinstance(current, dict) and key in current:
-            current = current[key]
-        else:
-            logger.warning("Metric path %r not found in results", path)
-            return None
-
-    try:
-        return float(current)
-    except (TypeError, ValueError):
-        logger.warning("Metric value at %r is not numeric: %r", path, current)
-        return None
-
-
 def run_dts(
     dts_path: Path,
-    config: dict,
     suites: list[str],
     perf: bool,
     metric_path: str,
@@ -61,7 +37,6 @@ def run_dts(
 
     Args:
         dts_path: Path to the DTS installation directory.
-        config: Runner configuration dictionary (for DTS-specific settings).
         suites: List of test suite names to run.
         perf: Whether to run in performance mode.
         metric_path: Dot-notation path to extract metric from results JSON.
@@ -103,7 +78,10 @@ def run_dts(
 
         metric_value = None
         if results_json is not None:
-            metric_value = _extract_metric_value(results_json, metric_path)
+            try:
+                metric_value = extract_metric(results_json, metric_path)
+            except (KeyError, IndexError, ValueError):
+                logger.warning("Failed to extract metric at %r", metric_path)
 
         return DtsResult(
             success=True,

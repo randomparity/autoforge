@@ -8,9 +8,9 @@ real hardware.
 An **agent** on your workstation proposes source changes to DPDK and writes a
 test request JSON file. It commits the request and the DPDK submodule pointer,
 then pushes. A **runner** on a lab machine polls git, claims the request, builds
-DPDK at the specified commit, executes DTS performance tests, and pushes the
-results back. The agent detects completion, records the metric, and starts the
-next iteration.
+DPDK at the specified commit, runs performance tests (testpmd or DTS), and
+pushes the results back. The agent detects completion, records the metric,
+keeps good changes, reverts bad ones, and starts the next iteration.
 
 ```
 Agent                              Runner
@@ -18,9 +18,9 @@ Agent                              Runner
   |  commit + push ----------------> |
   |                         claim request
   |                         build DPDK
-  |                         run DTS tests
+  |                         run testpmd / DTS
   |  <-------------- push results    |
-  |  read metric, record in TSV      |
+  |  read metric, keep or revert     |
 ```
 
 ## Quick start
@@ -55,6 +55,8 @@ uv run autosearch --autonomous --provider openrouter --dry-run
 | `--autonomous` | Use Claude API for automated change proposals |
 | `--provider` | API provider: `anthropic` (default) or `openrouter` |
 | `--campaign <path>` | Path to campaign TOML config (default: `config/campaign.toml`) |
+| `--log-level` | Log level: `debug`, `info`, `warning`, `error` (default: info) |
+| `--log-file <path>` | Also write logs to a file |
 
 For full setup, see the [agent guide](docs/agent.md) and
 [runner guide](docs/runner.md).
@@ -64,15 +66,15 @@ For full setup, see the [agent guide](docs/agent.md) and
 ```
 src/
   agent/       Agent loop, protocol, history, metric, strategy
-  runner/      Runner service, build, execute, protocol
+  runner/      Runner service, build, testpmd, execute (DTS), protocol
   protocol/    Shared schema (TestRequest dataclass)
+  logging_config.py  Shared logging setup
 config/
-  campaign.toml           Campaign settings (metric, goal, DTS suites, scope)
-  runner.toml.example     Runner-specific paths and timeouts
-  nodes.yaml.example      DTS node definitions (two-node topology)
-  test_run.yaml.example   DTS test run configuration
+  campaign.toml           Campaign settings (metric, goal, test backend, scope)
+  runner.toml.example     Runner-specific paths, build, and testpmd settings
 requests/      Test request JSON files (the communication protocol)
 results.tsv    Cumulative iteration history
+failures.tsv   Record of reverted optimization attempts
 dpdk/          DPDK v25.11 source (git submodule)
 docs/          Documentation
 ```
@@ -89,4 +91,4 @@ uv run ruff format src/ tests/
 ## Documentation
 
 - [Agent guide](docs/agent.md) — workstation setup, campaign config, running
-- [Runner guide](docs/runner.md) — lab machine setup, DTS config, deployment
+- [Runner guide](docs/runner.md) — lab machine setup, testpmd/DTS config, deployment

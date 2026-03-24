@@ -18,9 +18,9 @@ test_suites = ["TestPmd"]
 perf = true
 
 [agent]
-# Seconds between polling DTS job status
+# Seconds between polling for test results
 poll_interval = 30
-# Total wall-clock budget for a single DTS run
+# Total wall-clock budget for a single test run
 timeout_minutes = 60
 
 [goal]
@@ -39,5 +39,7 @@ Constraints: do not change public API signatures or break other PMDs.
 [dpdk]
 # Path to the DPDK git submodule relative to repo root
 submodule_path = "dpdk"
+# Branch in the submodule where good changes accumulate
+optimization_branch = "autosearch/optimize"
 # Source paths the agent is allowed to modify (relative to submodule_path)
 scope = ["drivers/net/mlx5/", "drivers/common/mlx5/", "app/test-pmd/"]
