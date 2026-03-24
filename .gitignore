@@ -10,3 +10,4 @@ config/runner.toml
 config/nodes.yaml
 config/test_run.yaml
 .env
+.desloppify/

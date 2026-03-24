@@ -6,18 +6,19 @@ import logging
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
 
-from src.protocol.schema import (
+from src.protocol import (
+    DEFAULT_REQUESTS_DIR,
     STATUS_CLAIMED,
     STATUS_FAILED,
     STATUS_PENDING,
+    StatusLiteral,
     TestRequest,
 )
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_REQUESTS_DIR = Path("requests")
+GIT_TIMEOUT = 60
 
 
 def _git_commit_push(path: Path, message: str, retries: int = 3) -> bool:
@@ -36,12 +37,14 @@ def _git_commit_push(path: Path, message: str, retries: int = 3) -> bool:
         check=True,
         capture_output=True,
         text=True,
+        timeout=GIT_TIMEOUT,
     )
     subprocess.run(
         ["git", "commit", "-m", message],
         check=True,
         capture_output=True,
         text=True,
+        timeout=GIT_TIMEOUT,
     )
 
     for attempt in range(retries):
@@ -49,6 +52,7 @@ def _git_commit_push(path: Path, message: str, retries: int = 3) -> bool:
             ["git", "push"],
             capture_output=True,
             text=True,
+            timeout=GIT_TIMEOUT,
         )
         if result.returncode == 0:
             return True
@@ -61,6 +65,7 @@ def _git_commit_push(path: Path, message: str, retries: int = 3) -> bool:
                 ["git", "pull", "--rebase"],
                 capture_output=True,
                 text=True,
+                timeout=GIT_TIMEOUT,
             )
             if rebase.returncode != 0:
                 logger.error("Pull --rebase failed: %s", rebase.stderr.strip())
@@ -110,10 +115,6 @@ def claim(request: TestRequest, request_path: Path) -> bool:
     Returns:
         True if the claim succeeded, False otherwise.
     """
-    logger.info(
-        "Transitioning request %04d: %s -> %s",
-        request.sequence, request.status, STATUS_CLAIMED,
-    )
     request.transition_to(STATUS_CLAIMED)
     request.claimed_at = datetime.now(timezone.utc).isoformat()
     request.write(request_path)
@@ -131,28 +132,45 @@ def claim(request: TestRequest, request_path: Path) -> bool:
 
 def update_status(
     request: TestRequest,
-    status: str,
+    status: StatusLiteral,
     request_path: Path,
-    **fields: Any,
+    *,
+    results_json: dict | None = None,
+    results_summary: str | None = None,
+    metric_value: float | None = None,
+    completed_at: str | None = None,
+    error: str | None = None,
+    build_log_snippet: str | None = None,
 ) -> bool:
-    """Update a request's status and any extra fields, then commit and push.
+    """Update a request's status and result fields, then commit and push.
 
     Args:
         request: The test request to update.
         status: The new status string.
         request_path: Path to the request JSON file.
-        **fields: Additional fields to set on the request (e.g. results_json).
+        results_json: Test results as a dict.
+        results_summary: Human-readable results summary.
+        metric_value: Extracted metric value.
+        completed_at: ISO timestamp of completion.
+        error: Error description (for failed requests).
+        build_log_snippet: Truncated build log (for failed builds).
 
     Returns:
         True if the push succeeded, False otherwise.
     """
     logger.info("Transitioning request %04d: %s -> %s", request.sequence, request.status, status)
     request.transition_to(status)
+    fields = {
+        "results_json": results_json,
+        "results_summary": results_summary,
+        "metric_value": metric_value,
+        "completed_at": completed_at,
+        "error": error,
+        "build_log_snippet": build_log_snippet,
+    }
     for key, value in fields.items():
-        if not hasattr(request, key):
-            msg = f"TestRequest has no field {key!r}"
-            raise AttributeError(msg)
-        setattr(request, key, value)
+        if value is not None:
+            setattr(request, key, value)
 
     request.write(request_path)
     pushed = _git_commit_push(
@@ -173,7 +191,7 @@ def fail(
     request_path: Path,
     error: str,
     log_snippet: str | None = None,
-) -> None:
+) -> bool:
     """Mark a request as failed with an error message.
 
     Args:
@@ -181,16 +199,23 @@ def fail(
         request_path: Path to the request JSON file.
         error: Human-readable error description.
         log_snippet: Optional truncated build/test log.
-    """
-    extra: dict[str, Any] = {"error": error}
-    if log_snippet is not None:
-        extra["build_log_snippet"] = log_snippet
-    extra["completed_at"] = datetime.now(timezone.utc).isoformat()
 
-    pushed = update_status(request, STATUS_FAILED, request_path, **extra)
+    Returns:
+        True if the failure status was successfully pushed, False if only
+        written locally.
+    """
+    pushed = update_status(
+        request,
+        STATUS_FAILED,
+        request_path,
+        error=error,
+        build_log_snippet=log_snippet,
+        completed_at=datetime.now(timezone.utc).isoformat(),
+    )
     if not pushed:
         logger.critical(
             "Could not push failure status for request %04d; local file written at %s",
             request.sequence,
             request_path,
         )
+    return pushed

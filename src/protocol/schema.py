@@ -5,14 +5,20 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-STATUS_PENDING = "pending"
-STATUS_CLAIMED = "claimed"
-STATUS_BUILDING = "building"
-STATUS_RUNNING = "running"
-STATUS_COMPLETED = "completed"
-STATUS_FAILED = "failed"
+DEFAULT_REQUESTS_DIR = Path("requests")
+
+StatusLiteral = Literal[
+    "pending", "claimed", "building", "running", "completed", "failed"
+]
+
+STATUS_PENDING: StatusLiteral = "pending"
+STATUS_CLAIMED: StatusLiteral = "claimed"
+STATUS_BUILDING: StatusLiteral = "building"
+STATUS_RUNNING: StatusLiteral = "running"
+STATUS_COMPLETED: StatusLiteral = "completed"
+STATUS_FAILED: StatusLiteral = "failed"
 
 VALID_STATUSES = frozenset({
     STATUS_PENDING,
@@ -49,7 +55,7 @@ class TestRequest:
     metric_path: str
     description: str
     backend: str = "testpmd"
-    status: str = STATUS_PENDING
+    status: StatusLiteral = STATUS_PENDING
 
     claimed_at: str | None = None
     completed_at: str | None = None
@@ -62,7 +68,7 @@ class TestRequest:
     def __post_init__(self) -> None:
         validate_status(self.status)
 
-    def transition_to(self, new_status: str) -> None:
+    def transition_to(self, new_status: StatusLiteral) -> None:
         """Transition to a new status, raising ValueError on invalid transitions."""
         validate_transition(self.status, new_status)
         self.status = new_status
@@ -98,14 +104,14 @@ class TestRequest:
         return self.status in (STATUS_COMPLETED, STATUS_FAILED)
 
 
-def validate_status(status: str) -> None:
+def validate_status(status: StatusLiteral) -> None:
     """Raise ValueError if status is not a valid status string."""
     if status not in VALID_STATUSES:
         msg = f"Invalid status {status!r}, must be one of {sorted(VALID_STATUSES)}"
         raise ValueError(msg)
 
 
-def validate_transition(current: str, new: str) -> None:
+def validate_transition(current: StatusLiteral, new: StatusLiteral) -> None:
     """Raise ValueError if the status transition is not allowed."""
     validate_status(current)
     validate_status(new)
@@ -118,3 +124,41 @@ def validate_transition(current: str, new: str) -> None:
 def request_fields() -> list[str]:
     """Return the list of field names for TestRequest."""
     return [f.name for f in TestRequest.__dataclass_fields__.values()]
+
+
+def extract_metric(data: dict, path: str) -> float:
+    """Walk a dot-notation path into nested dicts/lists and return the value.
+
+    Numeric path components are treated as list indices.
+
+    Args:
+        data: The root dictionary (e.g. DTS results JSON).
+        path: Dot-separated key path (e.g. 'test_runs.0.throughput_mpps').
+
+    Returns:
+        The numeric value at the given path.
+
+    Raises:
+        KeyError: If a dict key is missing.
+        IndexError: If a list index is out of range.
+        ValueError: If the path is empty or the value is not numeric.
+    """
+    if not path:
+        msg = "Metric path must not be empty"
+        raise ValueError(msg)
+
+    current: object = data
+    for key in path.split("."):
+        if isinstance(current, list):
+            current = current[int(key)]
+        elif isinstance(current, dict):
+            current = current[key]
+        else:
+            msg = f"Cannot index into {type(current).__name__} with key {key!r}"
+            raise KeyError(msg)
+
+    try:
+        return float(current)  # type: ignore[arg-type]  # validated by isinstance chain
+    except (TypeError, ValueError) as exc:
+        msg = f"Metric value at '{path}' is not numeric: {current!r}"
+        raise ValueError(msg) from exc

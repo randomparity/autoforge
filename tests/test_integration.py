@@ -5,12 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.agent.history import append_result, best_result, load_history
-from src.agent.metric import compare_metric, extract_metric
-from src.agent.protocol import create_request, read_request
-from src.protocol.schema import (
+from src.agent.metric import compare_metric
+from src.agent.protocol import create_request
+from src.protocol import (
     STATUS_COMPLETED,
     STATUS_FAILED,
     TestRequest,
+    extract_metric,
 )
 
 SAMPLE_CAMPAIGN = {
@@ -19,7 +20,7 @@ SAMPLE_CAMPAIGN = {
         "path": "results.throughput_mpps",
         "direction": "maximize",
     },
-    "dts": {
+    "test": {
         "test_suites": ["TestPmd"],
         "perf": True,
     },
@@ -64,7 +65,7 @@ class TestFullIteration:
             description="Increase burst size",
             requests_dir=requests_dir,
         )
-        req = read_request(path)
+        req = TestRequest.read(path)
         assert req.status == "pending"
 
         # Runner completes it

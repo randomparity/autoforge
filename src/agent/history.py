@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import csv
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_RESULTS_PATH = Path("results.tsv")
 DEFAULT_FAILURES_PATH = Path("failures.tsv")
@@ -35,9 +38,13 @@ def append_result(
     timestamp = datetime.now(UTC).isoformat()
     metric_str = str(metric) if metric is not None else ""
 
-    with open(results_path, "a", newline="") as f:
-        writer = csv.writer(f, delimiter="\t")
-        writer.writerow([seq, timestamp, commit, metric_str, status, description])
+    try:
+        with open(results_path, "a", newline="") as f:
+            writer = csv.writer(f, delimiter="\t")
+            writer.writerow([seq, timestamp, commit, metric_str, status, description])
+    except OSError as exc:
+        msg = f"Failed to append result to {results_path}: {exc}"
+        raise OSError(msg) from exc
 
 
 def load_history(path: Path | None = None) -> list[dict]:
@@ -56,9 +63,13 @@ def load_history(path: Path | None = None) -> list[dict]:
     if not results_path.exists():
         return []
 
-    with open(results_path, newline="") as f:
-        reader = csv.DictReader(f, delimiter="\t")
-        return list(reader)
+    try:
+        with open(results_path, newline="") as f:
+            reader = csv.DictReader(f, delimiter="\t")
+            return list(reader)
+    except OSError as exc:
+        logger.warning("Failed to read history from %s: %s", results_path, exc)
+        return []
 
 
 def best_result(
@@ -114,12 +125,16 @@ def append_failure(
     timestamp = datetime.now(UTC).isoformat()
     metric_str = str(metric) if metric is not None else ""
 
-    write_header = not failures_path.exists()
-    with open(failures_path, "a", newline="") as f:
-        writer = csv.writer(f, delimiter="\t")
-        if write_header:
-            writer.writerow(FAILURE_COLUMNS)
-        writer.writerow([timestamp, commit, metric_str, description, diff_summary])
+    try:
+        write_header = not failures_path.exists()
+        with open(failures_path, "a", newline="") as f:
+            writer = csv.writer(f, delimiter="\t")
+            if write_header:
+                writer.writerow(FAILURE_COLUMNS)
+            writer.writerow([timestamp, commit, metric_str, description, diff_summary])
+    except OSError as exc:
+        msg = f"Failed to append failure to {failures_path}: {exc}"
+        raise OSError(msg) from exc
 
 
 def load_failures(path: Path | None = None) -> list[dict]:
@@ -135,9 +150,13 @@ def load_failures(path: Path | None = None) -> list[dict]:
     if not failures_path.exists():
         return []
 
-    with open(failures_path, newline="") as f:
-        reader = csv.DictReader(f, delimiter="\t")
-        return list(reader)
+    try:
+        with open(failures_path, newline="") as f:
+            reader = csv.DictReader(f, delimiter="\t")
+            return list(reader)
+    except OSError as exc:
+        logger.warning("Failed to read failures from %s: %s", failures_path, exc)
+        return []
 
 
 def format_failures(failures: list[dict], limit: int = 10) -> str:

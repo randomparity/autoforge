@@ -5,6 +5,8 @@ description = "Iterative DPDK optimization via two-system architecture"
 requires-python = ">=3.13"
 dependencies = [
     "anthropic>=0.52.0",
+    # Required by DPDK meson build (dpdk/buildtools/pmdinfogen.py) — the runner
+    # executes meson inside this venv, so pyelftools must be available here.
     "pyelftools>=0.31",
 ]
 

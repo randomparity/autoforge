@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import subprocess
 import time
 from dataclasses import dataclass
@@ -76,8 +77,6 @@ def build_dpdk(
             ]
         else:
             if build_dir.exists():
-                import shutil
-
                 shutil.rmtree(build_dir)
                 logger.info("Removed stale build dir %s", build_dir)
             meson_cmd = ["meson", "setup", str(build_dir), str(source_path)]

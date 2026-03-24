@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -11,7 +12,8 @@ from pathlib import Path
 import tomllib
 
 from src.logging_config import setup_logging
-from src.protocol.schema import (
+from src.protocol import (
+    DEFAULT_REQUESTS_DIR,
     STATUS_BUILDING,
     STATUS_CLAIMED,
     STATUS_COMPLETED,
@@ -21,7 +23,6 @@ from src.protocol.schema import (
 from src.runner.build import build_dpdk
 from src.runner.execute import run_dts
 from src.runner.protocol import (
-    DEFAULT_REQUESTS_DIR,
     claim,
     fail,
     find_pending,
@@ -42,8 +43,6 @@ def load_config(path: str | None = None) -> dict:
     Returns:
         Parsed configuration dictionary.
     """
-    import os
-
     config_path = path or os.environ.get("AUTOSEARCH_CONFIG", "config/runner.toml")
     with open(config_path, "rb") as f:
         return tomllib.load(f)
@@ -83,6 +82,7 @@ def _git_pull() -> bool:
         ["git", "pull", "--rebase"],
         capture_output=True,
         text=True,
+        timeout=60,
     )
     if result.returncode != 0:
         logger.error("git pull --rebase failed: %s", result.stderr.strip())
@@ -90,7 +90,7 @@ def _git_pull() -> bool:
     return True
 
 
-def process_request(request: TestRequest, request_path: Path, config: dict) -> None:
+def execute_request(request: TestRequest, request_path: Path, config: dict) -> None:
     """Process a single test request through build and test phases.
 
     Args:
@@ -148,7 +148,6 @@ def process_request(request: TestRequest, request_path: Path, config: dict) -> N
         logger.info("Running DTS at %s", dts_path)
         dts_result = run_dts(
             dts_path=dts_path,
-            config=config,
             suites=request.test_suites,
             perf=request.perf,
             metric_path=request.metric_path,
@@ -244,7 +243,7 @@ def main() -> None:
                 continue
 
             logger.info("Claimed request %04d, starting processing", request.sequence)
-            process_request(request, request_path, config)
+            execute_request(request, request_path, config)
 
     except KeyboardInterrupt:
         logger.info("Runner stopped by user")

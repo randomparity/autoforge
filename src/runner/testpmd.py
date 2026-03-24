@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import pty
@@ -115,15 +116,8 @@ def run_testpmd(
         )
 
     try:
-        result = _measure_throughput(
-            proc, master_fd, warmup_seconds, measure_seconds, timeout
-        )
-        return TestpmdResult(
-            success=result[0],
-            throughput_mpps=result[1],
-            port_stats=result[2],
-            error=result[3],
-            duration_seconds=time.monotonic() - start,
+        return _measure_throughput(
+            proc, master_fd, warmup_seconds, measure_seconds, timeout, start
         )
     finally:
         _ensure_stopped(proc, master_fd)
@@ -170,27 +164,29 @@ def _measure_throughput(
     warmup: int,
     measure: int,
     timeout: int,
-) -> tuple[bool, float | None, str | None, str | None]:
+    start: float,
+) -> TestpmdResult:
     """Wait for testpmd to start, measure, then stop and parse stats."""
     boot_output = _read_until(fd, "Press enter to exit", min(timeout, 60))
     if proc.poll() is not None:
-        return (False, None, boot_output, "testpmd exited during startup")
+        return TestpmdResult(
+            False, None, boot_output, "testpmd exited during startup",
+            time.monotonic() - start,
+        )
 
     if "Press enter to exit" not in boot_output:
-        return (
-            False, None, boot_output,
-            "testpmd did not reach forwarding state",
+        return TestpmdResult(
+            False, None, boot_output, "testpmd did not reach forwarding state",
+            time.monotonic() - start,
         )
 
     total_time = warmup + measure
     logger.info("Warming up %ds + measuring %ds", warmup, measure)
     time.sleep(total_time)
 
-    # Press Enter to stop testpmd
     logger.info("Stopping testpmd after %ds", total_time)
     os.write(fd, b"\n")
 
-    # Read shutdown output with forward stats
     shutdown_output = _read_until(fd, "Bye...", timeout=30)
     proc.wait(timeout=10)
 
@@ -198,12 +194,12 @@ def _measure_throughput(
 
     throughput = _parse_throughput(all_output, total_time)
     if throughput is None:
-        return (
-            False, None, all_output,
-            "Failed to parse throughput from stats",
+        return TestpmdResult(
+            False, None, all_output, "Failed to parse throughput from stats",
+            time.monotonic() - start,
         )
 
-    return (True, throughput, all_output, None)
+    return TestpmdResult(True, throughput, all_output, None, time.monotonic() - start)
 
 
 def _parse_throughput(output: str, duration: float) -> float | None:
@@ -247,8 +243,6 @@ def _ensure_stopped(proc: subprocess.Popen, fd: int) -> None:
             logger.warning("testpmd did not exit gracefully, killing")
             proc.kill()
             proc.wait(timeout=5)
-
-    import contextlib
 
     with contextlib.suppress(OSError):
         os.close(fd)
