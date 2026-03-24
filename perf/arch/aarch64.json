@@ -1,0 +1,47 @@
+{
+  "arch": "aarch64",
+  "kernel_min": "4.9",
+  "pmu_driver": "armv8_pmuv3",
+  "events": {
+    "cycles": "cycles",
+    "instructions": "instructions",
+    "l1d_miss": "L1-dcache-load-misses",
+    "l2_miss": "l2d_cache_refill",
+    "branch_miss": "branch-misses",
+    "stalled_frontend": "stall_frontend",
+    "stalled_backend": "stall_backend"
+  },
+  "derived_metrics": {
+    "ipc": "instructions / cycles",
+    "l1d_miss_rate": "l1d_miss / instructions",
+    "l2_miss_rate": "l2_miss / instructions",
+    "branch_miss_rate": "branch_miss / instructions",
+    "frontend_bound": "stalled_frontend / cycles",
+    "backend_bound": "stalled_backend / cycles"
+  },
+  "heuristics": [
+    {
+      "condition": "ipc < 1.0",
+      "diagnosis": "Pipeline underutilized.",
+      "suggestions": [
+        "Check cache miss rates and branch misprediction.",
+        "Verify NEON/SVE SIMD paths are active in hot loops.",
+        "Check for unaligned accesses affecting throughput."
+      ]
+    },
+    {
+      "condition": "l1d_miss_rate > 0.05",
+      "diagnosis": "Significant L1 data cache pressure.",
+      "suggestions": [
+        "Review data structure layout for 64B cache line alignment.",
+        "Consider software prefetching in packet processing loops.",
+        "Check NUMA topology on multi-socket systems."
+      ]
+    }
+  ],
+  "notes": [
+    "ARMv8 PMUv3 typically supports 6 hardware counters.",
+    "Some events (stall_frontend, stall_backend) may not be available on all implementations.",
+    "For DPDK: check RTE_ARCH_ARM64 ifdefs for NEON-optimized memcpy and CRC paths."
+  ]
+}

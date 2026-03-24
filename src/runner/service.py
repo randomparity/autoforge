@@ -163,10 +163,12 @@ def execute_request(request: TestRequest, request_path: Path, config: dict) -> N
         metric_value = dts_result.metric_value
     else:
         logger.info("Running testpmd measurement")
+        profile_config = config.get("profiling", {})
         testpmd_result = run_testpmd(
             build_dir=build_dir,
             config=config,
             timeout=test_timeout,
+            profile_config=profile_config,
         )
         if not testpmd_result.success:
             logger.error("testpmd failed: %s", testpmd_result.error)
@@ -182,6 +184,8 @@ def execute_request(request: TestRequest, request_path: Path, config: dict) -> N
             testpmd_result.throughput_mpps or 0,
         )
         results_json = {"throughput_mpps": testpmd_result.throughput_mpps}
+        if testpmd_result.profile_summary:
+            results_json["profiling"] = testpmd_result.profile_summary
         results_summary = testpmd_result.port_stats
         metric_value = testpmd_result.throughput_mpps
 

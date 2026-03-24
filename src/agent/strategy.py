@@ -14,12 +14,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def format_context(history: list[dict], campaign: CampaignConfig) -> str:
+def format_context(
+    history: list[dict],
+    campaign: CampaignConfig,
+    *,
+    profile_summary: dict | None = None,
+) -> str:
     """Build a prompt-friendly summary of campaign state and history.
 
     Args:
         history: List of row dicts from load_history().
         campaign: Parsed campaign.toml as a dict.
+        profile_summary: Optional profiling data from the latest run.
 
     Returns:
         A multi-line string suitable for display or prompt injection.
@@ -60,6 +66,10 @@ def format_context(history: list[dict], campaign: CampaignConfig) -> str:
             desc = row.get("description", "?")
             lines.append(f"  #{row.get('sequence', '?')} [{status}] metric={metric} — {desc}")
 
+    if profile_summary:
+        lines.append("")
+        lines.extend(format_profile_lines(profile_summary))
+
     return "\n".join(lines)
 
 
@@ -74,6 +84,37 @@ def _scored_rows(history: list[dict]) -> list[tuple[float, dict]]:
             except ValueError:
                 continue
     return scored
+
+
+def format_profile_lines(summary: dict) -> list[str]:
+    """Format profiling data for prompt context.
+
+    Args:
+        summary: Profile summary dict from summarize().
+
+    Returns:
+        List of formatted lines.
+    """
+    lines = ["Profiling data (latest run):"]
+    if top := summary.get("top_functions"):
+        lines.append("  Hot functions:")
+        for f in top[:10]:
+            lines.append(f"    {f['pct']:5.1f}%  {f['name']}")
+    if derived := summary.get("derived_metrics"):
+        metrics_parts = []
+        if (ipc := derived.get("ipc")) is not None:
+            metrics_parts.append(f"IPC={ipc:.3f}")
+        if (l1d := derived.get("l1d_miss_rate")) is not None:
+            metrics_parts.append(f"L1d-miss-rate={l1d:.4f}")
+        if (bb := derived.get("backend_bound")) is not None:
+            metrics_parts.append(f"backend-bound={bb:.3f}")
+        if metrics_parts:
+            lines.append(f"  Metrics: {', '.join(metrics_parts)}")
+    if diags := summary.get("diagnostics"):
+        lines.append("  Diagnostics:")
+        for d in diags[:5]:
+            lines.append(f"    - {d.get('category', '?')}: {d.get('evidence', '')}")
+    return lines
 
 
 def validate_change(dpdk_path: Path) -> bool:

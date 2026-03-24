@@ -36,6 +36,10 @@ thresholds, and LRO/TSO knob removal for small-packet workloads.
 Constraints: do not change public API signatures or break other PMDs.
 """
 
+[profiling]
+# Include profiling summary in results pushed to agent
+enabled = true
+
 [dpdk]
 # Path to the DPDK git submodule relative to repo root
 submodule_path = "dpdk"

@@ -51,6 +51,12 @@ class CampaignMeta(TypedDict, total=False):
     max_iterations: int
 
 
+class ProfilingConfig(TypedDict, total=False):
+    """Profiling configuration from campaign TOML."""
+
+    enabled: bool
+
+
 class CampaignConfig(TypedDict, total=False):
     """Full campaign configuration as loaded from TOML."""
 
@@ -60,3 +66,4 @@ class CampaignConfig(TypedDict, total=False):
     agent: AgentConfig
     dpdk: DpdkConfig
     goal: GoalConfig
+    profiling: ProfilingConfig
