@@ -1,6 +1,12 @@
 # runner.toml — machine-local runner configuration
 # Copy this file to runner.toml and fill in values for your environment.
 # runner.toml is gitignored; never commit host-specific paths or credentials.
+#
+# Sudo setup (required when testpmd.sudo or profiling.sudo is true):
+#   sudo ./scripts/setup-sudo.sh [username] [build_dir]
+#
+# This grants passwordless sudo for the testpmd binary and perf only.
+# See scripts/setup-sudo.sh for details.
 
 [runner]
 # Log level: debug, info, warning, error (also settable via LOG_LEVEL env var)
