@@ -112,6 +112,7 @@ def process_request(request: TestRequest, request_path: Path, config: dict) -> N
         commit=request.dpdk_commit,
         build_dir=build_dir,
         timeout=build_timeout,
+        build_config=config.get("build", {}),
     )
 
     if not build_result.success:
