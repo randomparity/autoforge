@@ -5,6 +5,7 @@ description = "Iterative DPDK optimization via two-system architecture"
 requires-python = ">=3.13"
 dependencies = [
     "anthropic>=0.52.0",
+    "pyelftools>=0.31",
 ]
 
 [project.scripts]
