@@ -110,14 +110,23 @@ def claim(request: TestRequest, request_path: Path) -> bool:
     Returns:
         True if the claim succeeded, False otherwise.
     """
+    logger.info(
+        "Transitioning request %04d: %s -> %s",
+        request.sequence, request.status, STATUS_CLAIMED,
+    )
     request.transition_to(STATUS_CLAIMED)
     request.claimed_at = datetime.now(timezone.utc).isoformat()
     request.write(request_path)
 
-    return _git_commit_push(
+    pushed = _git_commit_push(
         request_path,
         f"runner: claim request {request.sequence:04d}",
     )
+    if pushed:
+        logger.info("Claim pushed for request %04d", request.sequence)
+    else:
+        logger.error("Claim push failed for request %04d", request.sequence)
+    return pushed
 
 
 def update_status(
@@ -137,6 +146,7 @@ def update_status(
     Returns:
         True if the push succeeded, False otherwise.
     """
+    logger.info("Transitioning request %04d: %s -> %s", request.sequence, request.status, status)
     request.transition_to(status)
     for key, value in fields.items():
         if not hasattr(request, key):
@@ -153,6 +163,8 @@ def update_status(
         logger.error(
             "Failed to push status update to %s for request %04d", status, request.sequence
         )
+    else:
+        logger.debug("Pushed status %s for request %04d", status, request.sequence)
     return pushed
 
 
