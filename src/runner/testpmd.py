@@ -76,6 +76,7 @@ def run_testpmd(
     use_sudo = testpmd_cfg.get("sudo", True)
     cmd = [
         *(["sudo"] if use_sudo else []),
+        "stdbuf", "-oL",
         str(testpmd_bin),
         *eal_args,
         "--",
