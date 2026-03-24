@@ -12,6 +12,8 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 RX_PPS_RE = re.compile(r"Rx-pps:\s+(\d+)")
+RX_PACKETS_RE = re.compile(r"RX-packets:\s+(\d+)")
+TX_PACKETS_RE = re.compile(r"TX-packets:\s+(\d+)")
 
 
 @dataclass
@@ -32,11 +34,12 @@ def run_testpmd(
 ) -> TestpmdResult:
     """Run testpmd in io-fwd mode and measure bi-directional throughput.
 
-    Launches testpmd with tx_first, waits for warmup, then samples
-    port stats over a measurement window to compute Mpps.
+    Launches testpmd with --auto-start --tx-first, waits for forwarding
+    to begin, sleeps for warmup + measurement, then stops testpmd and
+    parses the accumulated forward statistics.
 
     Args:
-        build_dir: Path to the DPDK build directory (contains app/dpdk-testpmd).
+        build_dir: Path to the DPDK build directory.
         config: Runner configuration dictionary.
         timeout: Maximum seconds before testpmd is killed.
 
@@ -71,7 +74,8 @@ def run_testpmd(
         eal_args.extend(["-a", pci])
 
     use_sudo = testpmd_cfg.get("sudo", True)
-    cmd = [*(["sudo"] if use_sudo else []),
+    cmd = [
+        *(["sudo"] if use_sudo else []),
         str(testpmd_bin),
         *eal_args,
         "--",
@@ -116,11 +120,11 @@ def run_testpmd(
             duration_seconds=time.monotonic() - start,
         )
     finally:
-        _stop_testpmd(proc)
+        _ensure_stopped(proc)
 
 
-def _wait_for_prompt(proc: subprocess.Popen, timeout: int) -> str:
-    """Read testpmd output until we see the testpmd> prompt."""
+def _wait_for_ready(proc: subprocess.Popen, timeout: int) -> str:
+    """Read testpmd output until forwarding has started."""
     output: list[str] = []
     deadline = time.monotonic() + timeout
 
@@ -130,17 +134,11 @@ def _wait_for_prompt(proc: subprocess.Popen, timeout: int) -> str:
             break
         output.append(line)
         logger.debug("testpmd: %s", line.rstrip())
-        if "testpmd>" in line:
+        if "Press enter to exit" in line or "start packet forwarding" in line:
+            logger.info("testpmd is forwarding")
             return "".join(output)
 
     return "".join(output)
-
-
-def _send_command(proc: subprocess.Popen, command: str) -> None:
-    """Send a command to testpmd's stdin."""
-    logger.debug("testpmd cmd: %s", command)
-    proc.stdin.write(command + "\n")
-    proc.stdin.flush()
 
 
 def _measure_throughput(
@@ -149,63 +147,84 @@ def _measure_throughput(
     measure: int,
     timeout: int,
 ) -> tuple[bool, float | None, str | None, str | None]:
-    """Drive testpmd through warmup and measurement, return results.
+    """Wait for testpmd to forward, measure, then stop and parse stats.
 
     Returns:
-        (success, throughput_mpps, port_stats_text, error_message)
+        (success, throughput_mpps, stats_text, error_message)
     """
-    boot_output = _wait_for_prompt(proc, timeout=min(timeout, 60))
+    boot_output = _wait_for_ready(proc, timeout=min(timeout, 60))
     if proc.poll() is not None:
         return (False, None, boot_output, "testpmd exited during startup")
 
-    logger.info("Warming up for %ds", warmup)
-    time.sleep(warmup)
+    total_time = warmup + measure
+    logger.info("Warming up %ds + measuring %ds", warmup, measure)
+    time.sleep(total_time)
 
-    # Reset counters
-    _send_command(proc, "show port stats all")
-    _wait_for_prompt(proc, timeout=10)
+    # Press Enter to stop testpmd — it prints accumulated forward stats
+    logger.info("Stopping testpmd after %ds", total_time)
+    proc.stdin.write("\n")
+    proc.stdin.flush()
 
-    logger.info("Measuring for %ds", measure)
-    time.sleep(measure)
+    # Read remaining output (forward stats + shutdown)
+    try:
+        remaining_output, _ = proc.communicate(timeout=30)
+    except subprocess.TimeoutExpired:
+        logger.warning("testpmd did not exit after Enter, killing")
+        proc.kill()
+        remaining_output, _ = proc.communicate(timeout=5)
 
-    # Collect measurement
-    _send_command(proc, "show port stats all")
-    stats_output = _wait_for_prompt(proc, timeout=10)
+    all_output = boot_output + remaining_output
 
-    throughput = _parse_throughput(stats_output)
+    throughput = _parse_throughput(all_output, total_time)
     if throughput is None:
-        return (False, None, stats_output, "Failed to parse Rx-pps from stats")
+        return (False, None, all_output, "Failed to parse throughput from stats")
 
-    return (True, throughput, stats_output, None)
-
-
-def _parse_throughput(stats_output: str) -> float | None:
-    """Parse Rx-pps from all ports and return total bi-directional Mpps."""
-    matches = RX_PPS_RE.findall(stats_output)
-    if not matches:
-        logger.warning("No Rx-pps found in output:\n%s", stats_output)
-        return None
-
-    total_pps = sum(int(m) for m in matches)
-    mpps = total_pps / 1_000_000
-    logger.info(
-        "Throughput: %s (per-port pps: %s)",
-        f"{mpps:.2f} Mpps",
-        ", ".join(matches),
-    )
-    return round(mpps, 4)
+    return (True, throughput, all_output, None)
 
 
-def _stop_testpmd(proc: subprocess.Popen) -> None:
-    """Gracefully stop testpmd, falling back to kill."""
+def _parse_throughput(output: str, duration: float) -> float | None:
+    """Parse accumulated forward stats and compute bi-directional Mpps.
+
+    Looks for the 'Accumulated forward statistics for all ports' section
+    and extracts RX-packets. Divides by duration to get pps.
+    """
+    # Try the accumulated stats line first (most reliable)
+    acc_section = output.split("Accumulated forward statistics for all ports")
+    if len(acc_section) >= 2:
+        acc_text = acc_section[1]
+        rx_match = RX_PACKETS_RE.search(acc_text)
+        if rx_match and duration > 0:
+            total_rx = int(rx_match.group(1))
+            mpps = total_rx / duration / 1_000_000
+            logger.info(
+                "Throughput: %.2f Mpps (RX-packets=%d over %.0fs)",
+                mpps, total_rx, duration,
+            )
+            return round(mpps, 4)
+
+    # Fallback: try per-port Rx-pps if available
+    matches = RX_PPS_RE.findall(output)
+    if matches:
+        total_pps = sum(int(m) for m in matches)
+        mpps = total_pps / 1_000_000
+        logger.info(
+            "Throughput: %.2f Mpps (from Rx-pps, per-port: %s)",
+            mpps, ", ".join(matches),
+        )
+        return round(mpps, 4)
+
+    logger.warning("No throughput data found in output")
+    return None
+
+
+def _ensure_stopped(proc: subprocess.Popen) -> None:
+    """Make sure testpmd is fully stopped."""
     if proc.poll() is not None:
         return
 
     try:
-        if proc.stdin and not proc.stdin.closed:
-            proc.stdin.write("stop\n")
-            proc.stdin.write("quit\n")
-            proc.stdin.flush()
+        proc.stdin.write("\n")
+        proc.stdin.flush()
         proc.wait(timeout=10)
     except (subprocess.TimeoutExpired, OSError):
         logger.warning("testpmd did not exit gracefully, killing")
