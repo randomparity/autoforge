@@ -33,6 +33,9 @@ cp config/runner.toml.example config/runner.toml
 
 | Section | Key | Description |
 |---------|-----|-------------|
+| `[runner]` | `log_level` | Log level: `debug`, `info`, `warning`, `error` (default: info) |
+| `[runner]` | `log_file` | Optional log file path (logs to stdout and file) |
+| `[runner]` | `poll_interval` | Seconds between polling for requests (default: 30) |
 | `[paths]` | `dpdk_src` | Absolute path to the DPDK source tree |
 | `[paths]` | `build_dir` | Build artifact directory (created automatically) |
 | `[paths]` | `dts_dir` | DTS installation path (DTS backend only) |
@@ -43,6 +46,7 @@ cp config/runner.toml.example config/runner.toml
 | `[build]` | `extra_meson_args` | Additional meson setup arguments |
 
 Override the config path with the `AUTOSEARCH_CONFIG` environment variable.
+The log level can also be set via the `LOG_LEVEL` environment variable.
 
 ## Test backends
 
@@ -50,8 +54,9 @@ The test backend is selected in `config/campaign.toml` via `[test].backend`.
 
 ### testpmd (default)
 
-Runs testpmd in io-fwd mode with `--tx-first` on back-to-back ports. Measures
-bi-directional throughput in Mpps by parsing `show port stats all` output.
+Runs testpmd in io-fwd mode with `--auto-start --tx-first` on back-to-back
+ports. Waits for warmup, runs for a measurement window, then stops testpmd and
+computes bi-directional Mpps from the accumulated forward statistics.
 
 Configure in `config/runner.toml`:
 

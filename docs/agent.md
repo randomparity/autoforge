@@ -8,7 +8,7 @@ loop: proposing DPDK changes, submitting test requests, and tracking results.
 - Python 3.13+
 - [uv](https://docs.astral.sh/uv/)
 - DPDK submodule initialized (`git submodule update --init`)
-- `ANTHROPIC_API_KEY` environment variable (autonomous mode only)
+- `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` environment variable (autonomous mode only)
 
 ## Installation
 
@@ -36,7 +36,9 @@ on startup (override with `--campaign <path>`).
 | `[test]` | `perf` | Enable performance mode (`true`/`false`) |
 | `[agent]` | `poll_interval` | Seconds between polling for results (default: 30) |
 | `[agent]` | `timeout_minutes` | Max wait for a single test run (default: 60) |
+| `[goal]` | `description` | Freeform text injected into the Claude prompt |
 | `[dpdk]` | `submodule_path` | Path to the DPDK submodule (default: `"dpdk"`) |
+| `[dpdk]` | `optimization_branch` | Branch in submodule for good changes (default: `"autosearch/optimize"`) |
 | `[dpdk]` | `scope` | Source paths the agent may modify (relative to submodule) |
 
 ## Interactive mode
@@ -89,6 +91,9 @@ request and polls for results as usual. Use `--dry-run` to test locally.
 | `--campaign <path>` | Path to campaign TOML config (default: `config/campaign.toml`) |
 | `--dry-run` | Skip git push — local testing only |
 | `--autonomous` | Use Claude API for automated change proposals |
+| `--provider` | API provider: `anthropic` (default) or `openrouter` |
+| `--log-level` | Log level: `debug`, `info`, `warning`, `error` |
+| `--log-file <path>` | Also write logs to a file |
 
 ## How results are tracked
 
@@ -104,6 +109,20 @@ Each iteration appends a row to `results.tsv` with columns:
 Request JSON files in `requests/` follow the naming pattern
 `{seq:04d}_{isodate}.json` and track the full lifecycle:
 `pending -> claimed -> building -> running -> completed|failed`.
+
+## Optimization branch
+
+On startup, the agent creates an `autosearch/optimize` branch in the DPDK
+submodule (configurable via `[dpdk].optimization_branch`). All proposed
+changes are committed to this branch.
+
+After each measurement:
+- **Metric improves**: the commit is kept and the submodule pointer is updated
+- **Metric worsens or stays flat**: the commit is reverted (`git reset --hard
+  HEAD~1`) and the failed attempt is recorded in `failures.tsv`
+
+In autonomous mode, recent failures are included in the Claude prompt so it
+avoids repeating failed approaches.
 
 ## Troubleshooting
 
