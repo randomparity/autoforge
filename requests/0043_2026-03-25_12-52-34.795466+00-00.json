@@ -1,0 +1,22 @@
+{
+  "sequence": 43,
+  "created_at": "2026-03-25T12:52:34.795466+00:00",
+  "dpdk_commit": "a3b31b6916887b288a697020585cd3cd2028dadd",
+  "test_suites": [
+    "TestPmd"
+  ],
+  "test_cases": null,
+  "perf": true,
+  "metric_name": "throughput_mpps",
+  "metric_path": "throughput_mpps",
+  "description": "Baseline: unmodified DPDK",
+  "backend": "testpmd",
+  "status": "pending",
+  "claimed_at": null,
+  "completed_at": null,
+  "build_log_snippet": null,
+  "results_json": null,
+  "results_summary": null,
+  "metric_value": null,
+  "error": null
+}
