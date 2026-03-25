@@ -11,12 +11,12 @@
   "metric_path": "throughput_mpps",
   "description": "bypass rte_pktmbuf_free_bulk in ZC tx stored mbuf free",
   "backend": "testpmd",
-  "status": "running",
+  "status": "failed",
   "claimed_at": "2026-03-25T11:02:30.986754+00:00",
-  "completed_at": null,
+  "completed_at": "2026-03-25T11:02:52.841002+00:00",
   "build_log_snippet": null,
   "results_json": null,
   "results_summary": null,
   "metric_value": null,
-  "error": null
+  "error": "testpmd exited during startup"
 }
