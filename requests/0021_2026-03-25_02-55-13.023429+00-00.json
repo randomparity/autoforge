@@ -11,7 +11,7 @@
   "metric_path": "throughput_mpps",
   "description": "batch n_bytes in zc tx (build fix)",
   "backend": "testpmd",
-  "status": "claimed",
+  "status": "building",
   "claimed_at": "2026-03-25T02:57:39.884910+00:00",
   "completed_at": null,
   "build_log_snippet": null,
