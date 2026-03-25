@@ -1,0 +1,22 @@
+{
+  "sequence": 12,
+  "created_at": "2026-03-25T01:41:25.597162+00:00",
+  "dpdk_commit": "afafdcea74439bb1ebd7402fcf8587451bc10bed",
+  "test_suites": [
+    "TestPmd"
+  ],
+  "test_cases": null,
+  "perf": true,
+  "metric_name": "throughput_mpps",
+  "metric_path": "throughput_mpps",
+  "description": "fix RTE_MIN shadow warning and remove dead pkts==0 check",
+  "backend": "testpmd",
+  "status": "pending",
+  "claimed_at": null,
+  "completed_at": null,
+  "build_log_snippet": null,
+  "results_json": null,
+  "results_summary": null,
+  "metric_value": null,
+  "error": null
+}
