@@ -29,3 +29,5 @@ timestamp	dpdk_commit	metric_value	description	diff_summary
  1 file changed, 16 insertions(+), 10 deletions(-)"
 2026-03-25T12:07:09.137786+00:00	16b2932d7f40859ccb8d1c72f4829b2f556859ee	119.5131	remove zc rx prefetch (hurts on POWER9) and cache d0->length locally	"drivers/net/memif/rte_eth_memif.c | 15 +++++++--------
  1 file changed, 7 insertions(+), 8 deletions(-)"
+2026-03-25T12:18:29.180517+00:00	f2bd5ee0d0205fcd67301b7785e084f7bb526d0f	119.2084	increase MAX_PKT_BURST 32->128 to match testpmd burst size	"drivers/net/memif/rte_eth_memif.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
