@@ -9,3 +9,5 @@ timestamp	dpdk_commit	metric_value	description	diff_summary
  1 file changed, 3 insertions(+), 1 deletion(-)"
 2026-03-25T02:36:03.357371+00:00	9946d7a657538c5a75d8cf284e224e1f3a08f8a7	82.707	force-inline memif_get_buffer and memif_get_ring_from_queue	"drivers/net/memif/rte_eth_memif.c | 4 ++--
  1 file changed, 2 insertions(+), 2 deletions(-)"
+2026-03-25T02:46:16.211943+00:00	82796c2debcf4da696ab3c32f5bbebe5a4a95097	85.2225	4-at-a-time unrolled tx fast path for single-segment packets	"drivers/net/memif/rte_eth_memif.c | 54 +++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 54 insertions(+)"
