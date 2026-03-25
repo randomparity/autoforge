@@ -237,7 +237,6 @@ class TestTestRunnerExecutePhase:
         assert STATUS_RUNNING in statuses
         assert STATUS_COMPLETED in statuses
         mock_fail.assert_not_called()
-        # Verify metric_value passed to update_status
         completed_call = [c for c in mock_update.call_args_list if c[0][1] == STATUS_COMPLETED][0]
         assert completed_call[1]["metric_value"] == 86.0
 

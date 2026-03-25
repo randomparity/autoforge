@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -78,19 +77,21 @@ class TestReadUntil:
 
     def test_timeout_returns_partial(self) -> None:
         fd = 99
-        start = time.monotonic()
+        select_calls = 0
 
         def fake_select(rlist, wlist, xlist, timeout):
-            if time.monotonic() - start > 1:
+            nonlocal select_calls
+            select_calls += 1
+            if select_calls > 2:
                 return ([], [], [])
             return ([fd], [], [])
 
-        call_count = 0
+        read_calls = 0
 
         def fake_read(fileno, size):
-            nonlocal call_count
-            call_count += 1
-            if call_count <= 2:
+            nonlocal read_calls
+            read_calls += 1
+            if read_calls <= 2:
                 return b"partial data\n"
             return b""
 

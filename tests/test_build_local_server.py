@@ -55,20 +55,9 @@ class TestConfigure:
         assert isinstance(LocalServerBuilder(), Builder)
 
 
-class TestBuildCheckoutFailure:
+class TestBuildSuccess:
     @patch("subprocess.run")
-    def test_checkout_nonzero_returns_failure(self, mock_run, tmp_path) -> None:
-        mock_run.return_value = _fail("checkout error")
-        b = _make_builder()
-        result = b.build(tmp_path / "src", "abc123", tmp_path / "build", 300)
-        assert isinstance(result, BuildResult)
-        assert result.success is False
-        assert "checkout error" in result.log
-
-
-class TestBuildFreshSuccess:
-    @patch("subprocess.run")
-    def test_no_build_dat_runs_meson_setup(self, mock_run, tmp_path) -> None:
+    def test_fresh_build_runs_meson_setup(self, mock_run, tmp_path) -> None:
         mock_run.return_value = _ok()
         src = tmp_path / "src"
         src.mkdir()
@@ -80,15 +69,13 @@ class TestBuildFreshSuccess:
         assert str(build_dir) in result.artifacts.get("build_dir", "")
 
         calls = mock_run.call_args_list
-        assert len(calls) == 3  # git checkout, meson, ninja
+        assert len(calls) == 3
         meson_args = calls[1][0][0]
         assert "meson" in meson_args[0]
         assert "--reconfigure" not in meson_args
 
-
-class TestBuildReconfigure:
     @patch("subprocess.run")
-    def test_build_dat_exists_uses_reconfigure(self, mock_run, tmp_path) -> None:
+    def test_reconfigure_when_build_dat_exists(self, mock_run, tmp_path) -> None:
         mock_run.return_value = _ok()
         src = tmp_path / "src"
         src.mkdir()
@@ -103,38 +90,6 @@ class TestBuildReconfigure:
         meson_args = mock_run.call_args_list[1][0][0]
         assert "--reconfigure" in meson_args
 
-
-class TestBuildMesonFailure:
-    @patch("subprocess.run")
-    def test_meson_nonzero_returns_failure(self, mock_run, tmp_path) -> None:
-        mock_run.side_effect = [_ok(), _fail("meson error")]
-        b = _make_builder()
-        result = b.build(tmp_path / "src", "abc123", tmp_path / "build", 300)
-        assert result.success is False
-        assert "meson error" in result.log
-
-
-class TestBuildNinjaFailure:
-    @patch("subprocess.run")
-    def test_ninja_nonzero_returns_failure(self, mock_run, tmp_path) -> None:
-        mock_run.side_effect = [_ok(), _ok(), _fail("ninja error")]
-        b = _make_builder()
-        result = b.build(tmp_path / "src", "abc123", tmp_path / "build", 300)
-        assert result.success is False
-        assert "ninja error" in result.log
-
-
-class TestBuildTimeout:
-    @patch("subprocess.run")
-    def test_timeout_expired_returns_failure(self, mock_run, tmp_path) -> None:
-        mock_run.side_effect = subprocess.TimeoutExpired("cmd", 300)
-        b = _make_builder()
-        result = b.build(tmp_path / "src", "abc123", tmp_path / "build", 300)
-        assert result.success is False
-        assert "TIMEOUT" in result.log
-
-
-class TestBuildCrossFile:
     @patch("subprocess.run")
     def test_cross_file_in_meson_args(self, mock_run, tmp_path) -> None:
         mock_run.return_value = _ok()
@@ -144,3 +99,38 @@ class TestBuildCrossFile:
         meson_args = mock_run.call_args_list[1][0][0]
         assert "--cross-file" in meson_args
         assert "/opt/cross.txt" in meson_args
+
+
+class TestBuildFailure:
+    @patch("subprocess.run")
+    def test_checkout_nonzero(self, mock_run, tmp_path) -> None:
+        mock_run.return_value = _fail("checkout error")
+        b = _make_builder()
+        result = b.build(tmp_path / "src", "abc123", tmp_path / "build", 300)
+        assert isinstance(result, BuildResult)
+        assert result.success is False
+        assert "checkout error" in result.log
+
+    @patch("subprocess.run")
+    def test_meson_nonzero(self, mock_run, tmp_path) -> None:
+        mock_run.side_effect = [_ok(), _fail("meson error")]
+        b = _make_builder()
+        result = b.build(tmp_path / "src", "abc123", tmp_path / "build", 300)
+        assert result.success is False
+        assert "meson error" in result.log
+
+    @patch("subprocess.run")
+    def test_ninja_nonzero(self, mock_run, tmp_path) -> None:
+        mock_run.side_effect = [_ok(), _ok(), _fail("ninja error")]
+        b = _make_builder()
+        result = b.build(tmp_path / "src", "abc123", tmp_path / "build", 300)
+        assert result.success is False
+        assert "ninja error" in result.log
+
+    @patch("subprocess.run")
+    def test_timeout_expired(self, mock_run, tmp_path) -> None:
+        mock_run.side_effect = subprocess.TimeoutExpired("cmd", 300)
+        b = _make_builder()
+        result = b.build(tmp_path / "src", "abc123", tmp_path / "build", 300)
+        assert result.success is False
+        assert "TIMEOUT" in result.log
