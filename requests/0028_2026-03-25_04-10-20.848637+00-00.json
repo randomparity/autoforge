@@ -11,7 +11,7 @@
   "metric_path": "throughput_mpps",
   "description": "use rte_mov64 for <=64B packets in 4x unrolled rx, skip rte_memcpy branches",
   "backend": "testpmd",
-  "status": "claimed",
+  "status": "building",
   "claimed_at": "2026-03-25T04:11:45.955273+00:00",
   "completed_at": null,
   "build_log_snippet": null,
