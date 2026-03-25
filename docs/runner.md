@@ -26,11 +26,19 @@ checks for runner prerequisites (meson, ninja, compiler, pkg-config).
 
 ## Runner configuration
 
-Copy the example and fill in your environment paths:
+Copy the framework example and fill in your environment paths:
 
 ```bash
 cp config/runner.toml.example config/runner.toml
 ```
+
+Then append the project-specific sections for your plugins:
+
+```bash
+cat projects/dpdk/runner.toml.example >> config/runner.toml
+```
+
+Edit `config/runner.toml` to match your hardware (lcores, PCI addresses, etc.).
 
 `config/runner.toml` is gitignored — never commit host-specific paths.
 
