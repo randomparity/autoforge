@@ -11,7 +11,7 @@
   "metric_path": "throughput_mpps",
   "description": "bypass rte_pktmbuf_free_bulk in non-ZC tx, use direct mempool put",
   "backend": "testpmd",
-  "status": "claimed",
+  "status": "building",
   "claimed_at": "2026-03-25T10:59:22.823432+00:00",
   "completed_at": null,
   "build_log_snippet": null,
