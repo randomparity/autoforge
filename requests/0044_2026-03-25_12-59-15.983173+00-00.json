@@ -11,7 +11,7 @@
   "metric_path": "throughput_mpps",
   "description": "compile-time constant 64 in rte_memcpy for 4x rx loop, enables GCC inline",
   "backend": "testpmd",
-  "status": "claimed",
+  "status": "building",
   "claimed_at": "2026-03-25T13:00:35.524847+00:00",
   "completed_at": null,
   "build_log_snippet": null,
