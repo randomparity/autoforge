@@ -1,0 +1,22 @@
+{
+  "sequence": 5,
+  "created_at": "2026-03-25T01:15:05.415951+00:00",
+  "dpdk_commit": "9d46c3dfff84286885dd66e06699d0a550c7b0ad",
+  "test_suites": [
+    "TestPmd"
+  ],
+  "test_cases": null,
+  "perf": true,
+  "metric_name": "throughput_mpps",
+  "metric_path": "throughput_mpps",
+  "description": "increase MAX_PKT_BURST from 32 to 64 to reduce alloc/free cycles",
+  "backend": "testpmd",
+  "status": "pending",
+  "claimed_at": null,
+  "completed_at": null,
+  "build_log_snippet": null,
+  "results_json": null,
+  "results_summary": null,
+  "metric_value": null,
+  "error": null
+}
