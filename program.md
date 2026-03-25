@@ -24,7 +24,14 @@ You cannot run testpmd locally — the runner machine has the hardware/setup. Co
 
 ## What you CAN do
 
-- Modify files in the DPDK submodule under the scoped paths from `campaign.toml` `[dpdk] scope`.
+- Modify files in the DPDK submodule under the scoped paths from `campaign.toml` `[dpdk] scope`:
+  - `drivers/net/memif/` — the memif PMD (rx/tx burst functions, descriptor handling)
+  - `app/test-pmd/` — testpmd forwarding application
+  - `lib/eal/ppc/` — POWER-specific EAL: rte_memcpy, rte_prefetch, rte_atomic, rte_pause
+  - `lib/eal/include/` — architecture-generic EAL headers
+  - `lib/ring/` — lock-free ring queue (underlies mempool enqueue/dequeue)
+  - `lib/mbuf/` — mbuf alloc/free, metadata, pool ops
+  - `lib/mempool/` — mempool cache, pool operations
 - Commit in the submodule, create request files, push via the CLI.
 - Read any file in the repo for context.
 
@@ -34,7 +41,9 @@ You cannot run testpmd locally — the runner machine has the hardware/setup. Co
 - Run testpmd locally — there are no NICs or memif setup on this workstation.
 - Add new Python dependencies.
 - Change the memif wire protocol (`dpdk/drivers/net/memif/memif.h`).
-- Change public DPDK API signatures or break other PMDs.
+- Change public DPDK API signatures or break other PMDs or platforms.
+- Library changes must be guarded by `RTE_ARCH_PPC_64` ifdefs where they are
+  architecture-specific. Generic changes must not regress other architectures.
 
 ## CLI commands
 
@@ -98,9 +107,14 @@ LOOP FOREVER:
 
 - **Start with the profile data.** Focus optimization effort where the samples are.
 - **One change at a time.** Small, targeted changes are easier to evaluate.
-- **Memory operations dominate.** For memif, `rte_memcpy` in rx/tx paths is the main cost. Prefetching, batch processing, and reducing copies have high impact.
-- **Don't fight the compiler.** GCC and Clang are good at micro-optimization. Focus on algorithmic improvements and data access patterns.
+- **Reduce per-packet writes to shared structures.** On POWER9, writing to `mq->n_bytes` or similar fields per-packet is expensive. Batch with local accumulators written once per burst.
+- **Memory operations dominate.** The system is ~71% backend-bound. `rte_memcpy`, mbuf alloc/free, and ring operations are the primary costs.
+- **POWER9 specifics.** 128-byte cache lines (2x of x86), VSX/AltiVec 128-bit vectors, deep OoO pipeline. Extra prefetches often hurt — the pipeline is already memory-saturated.
+- **Unrolling works for rx (reads), not tx (writes).** 4x unrolling helped non-ZC rx (overlaps memcpy latency) but hurt tx (write contention on shared memory).
+- **Library-level opportunities.** `rte_pktmbuf_free_bulk` (18% of time), ring enqueue/dequeue (5%), and `rte_memcpy` are now the biggest targets. POWER-specific implementations in `lib/eal/ppc/` can be tuned.
+- **Don't fight the compiler.** GCC 15 at `-O3` with `-mcpu=power9` is aggressive. Force-inlining rarely helps.
 - **Avoid UB.** DPDK runs with `-O3`; undefined behavior will be exploited by the optimizer.
+- **Guard arch-specific changes.** Use `#ifdef RTE_ARCH_PPC_64` for POWER-only optimizations in library code.
 - **Read past failures.** The `context` command shows what was tried and failed. Don't repeat failed approaches.
 
 ## NEVER STOP
