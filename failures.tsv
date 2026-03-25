@@ -7,3 +7,5 @@ timestamp	dpdk_commit	metric_value	description	diff_summary
  1 file changed, 3 insertions(+), 3 deletions(-)"
 2026-03-25T01:46:30.710250+00:00	26dbfb5c7ade7feb1945b853f87ddc744010bd3e	83.1	batch n_bytes in zc rx path only (not tx)	"drivers/net/memif/rte_eth_memif.c | 4 +++-
  1 file changed, 3 insertions(+), 1 deletion(-)"
+2026-03-25T02:36:03.357371+00:00	9946d7a657538c5a75d8cf284e224e1f3a08f8a7	82.707	force-inline memif_get_buffer and memif_get_ring_from_queue	"drivers/net/memif/rte_eth_memif.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)"

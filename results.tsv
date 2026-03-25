@@ -6,3 +6,4 @@ sequence	timestamp	dpdk_commit	metric_value	status	description
 11	2026-03-25T01:40:22.429400+00:00	70e4597753c0574ba693ce3c0204aa6d895ae5f7	81.605	completed	optimize tx mempool check first+last (build fix)
 12	2026-03-25T01:43:12.311636+00:00	afafdcea74439bb1ebd7402fcf8587451bc10bed	82.3887	completed	fix RTE_MIN shadow warning and remove dead pkts==0 check
 13	2026-03-25T01:46:30.664401+00:00	26dbfb5c7ade7feb1945b853f87ddc744010bd3e	83.1	completed	batch n_bytes in zc rx path only (not tx)
+15	2026-03-25T02:36:03.311725+00:00	9946d7a657538c5a75d8cf284e224e1f3a08f8a7	82.707	completed	force-inline memif_get_buffer and memif_get_ring_from_queue
