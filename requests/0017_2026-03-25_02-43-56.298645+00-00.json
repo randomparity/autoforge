@@ -11,7 +11,7 @@
   "metric_path": "throughput_mpps",
   "description": "4-at-a-time unrolled tx fast path for single-segment packets",
   "backend": "testpmd",
-  "status": "claimed",
+  "status": "building",
   "claimed_at": "2026-03-25T02:46:04.684412+00:00",
   "completed_at": null,
   "build_log_snippet": null,
