@@ -7,3 +7,4 @@ sequence	timestamp	dpdk_commit	metric_value	status	description
 12	2026-03-25T01:43:12.311636+00:00	afafdcea74439bb1ebd7402fcf8587451bc10bed	82.3887	completed	fix RTE_MIN shadow warning and remove dead pkts==0 check
 13	2026-03-25T01:46:30.664401+00:00	26dbfb5c7ade7feb1945b853f87ddc744010bd3e	83.1	completed	batch n_bytes in zc rx path only (not tx)
 15	2026-03-25T02:36:03.311725+00:00	9946d7a657538c5a75d8cf284e224e1f3a08f8a7	82.707	completed	force-inline memif_get_buffer and memif_get_ring_from_queue
+16	2026-03-25T02:41:19.355841+00:00	2e60c0238cd28ab3240328fd7d1031f38c823965	87.3715	completed	4-at-a-time unrolled rx fast path for single-segment packets
