@@ -1,0 +1,22 @@
+{
+  "sequence": 11,
+  "created_at": "2026-03-25T01:37:20.119090+00:00",
+  "dpdk_commit": "70e4597753c0574ba693ce3c0204aa6d895ae5f7",
+  "test_suites": [
+    "TestPmd"
+  ],
+  "test_cases": null,
+  "perf": true,
+  "metric_name": "throughput_mpps",
+  "metric_path": "throughput_mpps",
+  "description": "optimize tx mempool check first+last (build fix)",
+  "backend": "testpmd",
+  "status": "pending",
+  "claimed_at": null,
+  "completed_at": null,
+  "build_log_snippet": null,
+  "results_json": null,
+  "results_summary": null,
+  "metric_value": null,
+  "error": null
+}
