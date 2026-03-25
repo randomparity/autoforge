@@ -11,7 +11,7 @@
   "metric_path": "throughput_mpps",
   "description": "add descriptor and buffer prefetch to eth_memif_rx fast path",
   "backend": "testpmd",
-  "status": "claimed",
+  "status": "building",
   "claimed_at": "2026-03-25T00:54:11.794172+00:00",
   "completed_at": null,
   "build_log_snippet": null,
