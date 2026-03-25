@@ -7,6 +7,8 @@ import logging
 import subprocess
 from typing import TYPE_CHECKING
 
+from src.agent.hints import resolve_arch
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -70,6 +72,11 @@ def format_context(
     if profile_summary:
         lines.append("")
         lines.extend(format_profile_lines(profile_summary))
+
+    arch = resolve_arch(campaign)
+    if arch:
+        lines.append("")
+        lines.append(f"Tip: run `uv run autosearch hints` for {arch} optimization guidance.")
 
     return "\n".join(lines)
 

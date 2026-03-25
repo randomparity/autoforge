@@ -1,0 +1,85 @@
+"""Tests for architecture-specific optimization hints lookup."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+from src.agent.hints import HINTS_DIR, hints_path, hints_summary, list_topics, resolve_arch
+
+
+class TestHintsPath:
+    def test_valid_arch(self) -> None:
+        path = hints_path("ppc64le")
+        assert path == HINTS_DIR / "ppc64le.md"
+        assert path.exists()
+
+    def test_unknown_arch(self) -> None:
+        with pytest.raises(ValueError, match="Unknown arch 'mips64'"):
+            hints_path("mips64")
+
+    def test_missing_file(self) -> None:
+        with (
+            patch("src.agent.hints.HINTS_DIR", Path("/nonexistent/dir")),
+            pytest.raises(FileNotFoundError, match="No .* hints"),
+        ):
+            hints_path("aarch64")
+
+    def test_perf_counters_topic(self) -> None:
+        path = hints_path("ppc64le", topic="perf-counters")
+        assert path == HINTS_DIR / "ppc64le-perf-counters.md"
+        assert path.exists()
+
+    def test_unknown_topic(self) -> None:
+        with pytest.raises(ValueError, match="Unknown topic 'bogus'"):
+            hints_path("ppc64le", topic="bogus")
+
+    def test_missing_perf_counters(self) -> None:
+        with (
+            patch("src.agent.hints.HINTS_DIR", Path("/nonexistent/dir")),
+            pytest.raises(FileNotFoundError, match="No perf-counters hints"),
+        ):
+            hints_path("ppc64le", topic="perf-counters")
+
+
+class TestHintsSummary:
+    def test_format(self) -> None:
+        result = hints_summary("ppc64le")
+        assert "Architecture optimization hints for ppc64le:" in result
+        assert "ppc64le.md" in result
+        assert "lines" in result
+
+    def test_perf_counters_format(self) -> None:
+        result = hints_summary("ppc64le", topic="perf-counters")
+        assert "perf-counters" in result
+        assert "ppc64le-perf-counters.md" in result
+
+
+class TestListTopics:
+    def test_ppc64le_has_both(self) -> None:
+        topics = list_topics("ppc64le")
+        assert "optimization" in topics
+        assert "perf-counters" in topics
+
+    def test_unknown_arch(self) -> None:
+        with pytest.raises(ValueError, match="Unknown arch"):
+            list_topics("mips64")
+
+    def test_missing_dir(self) -> None:
+        with patch("src.agent.hints.HINTS_DIR", Path("/nonexistent/dir")):
+            topics = list_topics("ppc64le")
+            assert topics == []
+
+
+class TestResolveArch:
+    def test_present(self) -> None:
+        campaign = {"platform": {"arch": "ppc64le"}}
+        assert resolve_arch(campaign) == "ppc64le"
+
+    def test_absent(self) -> None:
+        assert resolve_arch({}) is None
+
+    def test_no_platform_section(self) -> None:
+        assert resolve_arch({"goal": {}}) is None
