@@ -40,17 +40,27 @@ class TestResult:
     duration_seconds: float
 
 
+@dataclass
+class ProfileResult:
+    """Result of a profiling phase."""
+
+    success: bool
+    summary: dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    duration_seconds: float = 0.0
+
+
 @runtime_checkable
 class Builder(Protocol):
     """Builds a project from source at a given commit."""
+
+    name: str
 
     def configure(self, project_config: dict[str, Any], runner_config: dict[str, Any]) -> None:
         """Store configuration for subsequent build calls."""
         ...
 
-    def build(
-        self, source_path: Path, commit: str, build_dir: Path, timeout: int
-    ) -> BuildResult:
+    def build(self, source_path: Path, commit: str, build_dir: Path, timeout: int) -> BuildResult:
         """Build the project and return the result."""
         ...
 
@@ -58,6 +68,8 @@ class Builder(Protocol):
 @runtime_checkable
 class Deployer(Protocol):
     """Deploys build artifacts to a test target."""
+
+    name: str
 
     def configure(self, project_config: dict[str, Any], runner_config: dict[str, Any]) -> None:
         """Store configuration for subsequent deploy calls."""
@@ -72,6 +84,8 @@ class Deployer(Protocol):
 class Tester(Protocol):
     """Runs performance tests against a deployed target."""
 
+    name: str
+
     def configure(self, project_config: dict[str, Any], runner_config: dict[str, Any]) -> None:
         """Store configuration for subsequent test calls."""
         ...
@@ -82,19 +96,15 @@ class Tester(Protocol):
 
 
 @runtime_checkable
-class Plugin(Protocol):
-    """A project plugin that provides builder, deployer, and tester."""
+class Profiler(Protocol):
+    """Captures performance profiles during test execution."""
 
     name: str
 
-    def create_builder(self) -> Builder:
-        """Create a new builder instance."""
+    def configure(self, project_config: dict[str, Any], runner_config: dict[str, Any]) -> None:
+        """Store configuration for subsequent profile calls."""
         ...
 
-    def create_deployer(self) -> Deployer:
-        """Create a new deployer instance."""
-        ...
-
-    def create_tester(self) -> Tester:
-        """Create a new tester instance."""
+    def profile(self, pid: int, duration: int, config: dict[str, Any]) -> ProfileResult:
+        """Profile a running process and return the result."""
         ...

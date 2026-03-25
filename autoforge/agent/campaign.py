@@ -16,15 +16,6 @@ class MetricConfig(TypedDict, total=False):
     threshold: float
 
 
-class TestConfig(TypedDict, total=False):
-    """Test configuration from campaign TOML."""
-
-    backend: str
-    test_suites: list[str]
-    test_cases: list[str]
-    perf: bool
-
-
 class AgentConfig(TypedDict, total=False):
     """Agent polling configuration from campaign TOML."""
 
@@ -33,13 +24,13 @@ class AgentConfig(TypedDict, total=False):
 
 
 class ProjectConfig(TypedDict, total=False):
-    """Project-specific configuration from campaign TOML.
+    """Project-specific configuration from campaign TOML."""
 
-    The 'plugin' key selects the autoforge plugin. All other keys
-    are passed through to the plugin as project_config.
-    """
-
-    plugin: str
+    name: str
+    build: str
+    deploy: str
+    test: str
+    profiler: str
     submodule_path: str
     optimization_branch: str
     scope: list[str]
@@ -81,7 +72,6 @@ class CampaignConfig(TypedDict, total=False):
 
     campaign: CampaignMeta
     metric: MetricConfig
-    test: TestConfig
     agent: AgentConfig
     project: ProjectConfig
     goal: GoalConfig

@@ -331,7 +331,7 @@ def cmd_sprint_init(name: str, campaign_path: Path) -> None:
 
 def cmd_sprint_list(campaign: CampaignConfig) -> None:
     """List all sprints with summary."""
-    sprints = list_sprints()
+    sprints = list_sprints(campaign)
     if not sprints:
         print("No sprints found.")
         return

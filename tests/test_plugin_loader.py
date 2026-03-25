@@ -1,8 +1,6 @@
-"""Tests for plugin discovery and loading."""
+"""Tests for file-based plugin discovery and loading."""
 
 from __future__ import annotations
-
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -11,112 +9,203 @@ from autoforge.plugins import (
     BuildResult,
     Deployer,
     DeployResult,
-    Plugin,
+    Profiler,
+    ProfileResult,
     Tester,
     TestResult,
-    list_plugins,
-    load_plugin,
+)
+from autoforge.plugins.loader import (
+    PipelineComponents,
+    list_components,
+    load_component,
+    load_pipeline,
 )
 
+BUILDER_SOURCE = """\
+from autoforge.plugins.protocols import BuildResult
 
-class FakeBuilder:
+class LocalServerBuilder:
+    name = "local-server"
+
     def configure(self, project_config, runner_config):
         pass
 
     def build(self, source_path, commit, build_dir, timeout):
         return BuildResult(success=True, log="ok", duration_seconds=1.0)
+"""
 
+DEPLOYER_SOURCE = """\
+from autoforge.plugins.protocols import DeployResult
 
-class FakeDeployer:
+class LocalDeployer:
+    name = "local"
+
     def configure(self, project_config, runner_config):
         pass
 
     def deploy(self, build_result):
         return DeployResult(success=True)
+"""
 
+TESTER_SOURCE = """\
+from autoforge.plugins.protocols import TestResult
 
-class FakeTester:
+class MemifTester:
+    name = "testpmd-memif"
+
     def configure(self, project_config, runner_config):
         pass
 
     def test(self, deploy_result, timeout):
         return TestResult(
-            success=True,
-            metric_value=1.0,
-            results_json=None,
-            results_summary=None,
-            error=None,
-            duration_seconds=1.0,
+            success=True, metric_value=86.0,
+            results_json=None, results_summary=None,
+            error=None, duration_seconds=10.0,
         )
+"""
+
+PROFILER_SOURCE = """\
+from autoforge.plugins.protocols import ProfileResult
+
+class PerfRecordProfiler:
+    name = "perf-record"
+
+    def configure(self, project_config, runner_config):
+        pass
+
+    def profile(self, pid, duration, config):
+        return ProfileResult(success=True, summary={"top": []})
+"""
 
 
-class FakePlugin:
-    name = "fake"
+def _setup_project(tmp_path, project="testproj"):
+    """Create a project with one plugin per category."""
+    base = tmp_path / project
+    (base / "builds").mkdir(parents=True)
+    (base / "deploys").mkdir(parents=True)
+    (base / "tests").mkdir(parents=True)
+    (base / "perfs").mkdir(parents=True)
 
-    def create_builder(self):
-        return FakeBuilder()
+    (base / "builds" / "local-server.py").write_text(BUILDER_SOURCE)
+    (base / "deploys" / "local.py").write_text(DEPLOYER_SOURCE)
+    (base / "tests" / "testpmd-memif.py").write_text(TESTER_SOURCE)
+    (base / "perfs" / "perf-record.py").write_text(PROFILER_SOURCE)
 
-    def create_deployer(self):
-        return FakeDeployer()
-
-    def create_tester(self):
-        return FakeTester()
-
-
-class TestProtocolConformance:
-    def test_fake_plugin_satisfies_protocol(self) -> None:
-        plugin = FakePlugin()
-        assert isinstance(plugin, Plugin)
-        assert isinstance(plugin.create_builder(), Builder)
-        assert isinstance(plugin.create_deployer(), Deployer)
-        assert isinstance(plugin.create_tester(), Tester)
+    return base
 
 
-class TestLoadPlugin:
-    def test_loads_registered_plugin(self) -> None:
-        mock_ep = MagicMock()
-        mock_ep.name = "fake"
-        mock_ep.load.return_value = FakePlugin
+class TestLoadComponent:
+    def test_loads_builder(self, tmp_path) -> None:
+        _setup_project(tmp_path)
+        comp = load_component("testproj", "build", "local-server", root=tmp_path)
+        assert isinstance(comp, Builder)
+        assert comp.name == "local-server"
 
-        with patch("autoforge.plugins.loader.entry_points", return_value=[mock_ep]):
-            plugin = load_plugin("fake")
+    def test_loads_deployer(self, tmp_path) -> None:
+        _setup_project(tmp_path)
+        comp = load_component("testproj", "deploy", "local", root=tmp_path)
+        assert isinstance(comp, Deployer)
+        assert comp.name == "local"
 
-        assert plugin.name == "fake"
-        mock_ep.load.assert_called_once()
+    def test_loads_tester(self, tmp_path) -> None:
+        _setup_project(tmp_path)
+        comp = load_component("testproj", "test", "testpmd-memif", root=tmp_path)
+        assert isinstance(comp, Tester)
+        assert comp.name == "testpmd-memif"
 
-    def test_raises_on_missing_plugin(self) -> None:
-        with (
-            patch("autoforge.plugins.loader.entry_points", return_value=[]),
-            pytest.raises(ValueError, match="not found"),
-        ):
-            load_plugin("nonexistent")
+    def test_loads_profiler(self, tmp_path) -> None:
+        _setup_project(tmp_path)
+        comp = load_component("testproj", "profiler", "perf-record", root=tmp_path)
+        assert isinstance(comp, Profiler)
+        assert comp.name == "perf-record"
 
-    def test_error_lists_installed_plugins(self) -> None:
-        mock_ep = MagicMock()
-        mock_ep.name = "dpdk"
+    def test_missing_plugin_raises(self, tmp_path) -> None:
+        _setup_project(tmp_path)
+        with pytest.raises(FileNotFoundError, match="not found"):
+            load_component("testproj", "build", "nonexistent", root=tmp_path)
 
-        with (
-            patch("autoforge.plugins.loader.entry_points", return_value=[mock_ep]),
-            pytest.raises(ValueError, match="dpdk"),
-        ):
-            load_plugin("missing")
+    def test_invalid_category_raises(self, tmp_path) -> None:
+        with pytest.raises(ValueError, match="Invalid category"):
+            load_component("testproj", "bogus", "anything", root=tmp_path)
+
+    def test_no_conforming_class_raises(self, tmp_path) -> None:
+        base = tmp_path / "testproj" / "builds"
+        base.mkdir(parents=True)
+        (base / "bad.py").write_text("class NotABuilder:\n    pass\n")
+        with pytest.raises(ValueError, match="No class conforming"):
+            load_component("testproj", "build", "bad", root=tmp_path)
 
 
-class TestListPlugins:
-    def test_returns_plugin_names(self) -> None:
-        ep1 = MagicMock()
-        ep1.name = "dpdk"
-        ep2 = MagicMock()
-        ep2.name = "vllm"
+class TestListComponents:
+    def test_lists_available(self, tmp_path) -> None:
+        _setup_project(tmp_path)
+        names = list_components("testproj", "build", root=tmp_path)
+        assert names == ["local-server"]
 
-        with patch("autoforge.plugins.loader.entry_points", return_value=[ep1, ep2]):
-            names = list_plugins()
+    def test_empty_category(self, tmp_path) -> None:
+        base = tmp_path / "testproj" / "builds"
+        base.mkdir(parents=True)
+        assert list_components("testproj", "build", root=tmp_path) == []
 
-        assert names == ["dpdk", "vllm"]
+    def test_missing_dir_returns_empty(self, tmp_path) -> None:
+        assert list_components("nonexistent", "build", root=tmp_path) == []
 
-    def test_empty_when_no_plugins(self) -> None:
-        with patch("autoforge.plugins.loader.entry_points", return_value=[]):
-            assert list_plugins() == []
+    def test_multiple_plugins(self, tmp_path) -> None:
+        _setup_project(tmp_path)
+        base = tmp_path / "testproj" / "builds"
+        (base / "remote-server.py").write_text(
+            BUILDER_SOURCE.replace("local-server", "remote-server").replace(
+                "LocalServerBuilder", "RemoteServerBuilder"
+            )
+        )
+        names = list_components("testproj", "build", root=tmp_path)
+        assert names == ["local-server", "remote-server"]
+
+
+class TestLoadPipeline:
+    def test_loads_full_pipeline(self, tmp_path) -> None:
+        _setup_project(tmp_path)
+        campaign = {
+            "project": {
+                "build": "local-server",
+                "deploy": "local",
+                "test": "testpmd-memif",
+                "profiler": "perf-record",
+            }
+        }
+        pipeline = load_pipeline("testproj", campaign, root=tmp_path)
+        assert isinstance(pipeline, PipelineComponents)
+        assert isinstance(pipeline.builder, Builder)
+        assert isinstance(pipeline.deployer, Deployer)
+        assert isinstance(pipeline.tester, Tester)
+        assert isinstance(pipeline.profiler, Profiler)
+
+    def test_profiler_optional(self, tmp_path) -> None:
+        _setup_project(tmp_path)
+        campaign = {
+            "project": {
+                "build": "local-server",
+                "deploy": "local",
+                "test": "testpmd-memif",
+            }
+        }
+        pipeline = load_pipeline("testproj", campaign, root=tmp_path)
+        assert pipeline.profiler is None
+
+    def test_missing_build_raises(self, tmp_path) -> None:
+        campaign = {"project": {"deploy": "local", "test": "testpmd-memif"}}
+        with pytest.raises(ValueError, match="build"):
+            load_pipeline("testproj", campaign, root=tmp_path)
+
+    def test_missing_deploy_raises(self, tmp_path) -> None:
+        campaign = {"project": {"build": "local-server", "test": "testpmd-memif"}}
+        with pytest.raises(ValueError, match="deploy"):
+            load_pipeline("testproj", campaign, root=tmp_path)
+
+    def test_missing_test_raises(self, tmp_path) -> None:
+        campaign = {"project": {"build": "local-server", "deploy": "local"}}
+        with pytest.raises(ValueError, match="test"):
+            load_pipeline("testproj", campaign, root=tmp_path)
 
 
 class TestResultDataclasses:
@@ -140,3 +229,9 @@ class TestResultDataclasses:
         )
         assert not r.success
         assert r.error == "failed"
+
+    def test_profile_result_defaults(self) -> None:
+        r = ProfileResult(success=True)
+        assert r.summary == {}
+        assert r.error is None
+        assert r.duration_seconds == 0.0

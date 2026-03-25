@@ -13,15 +13,12 @@ dependencies = [
 autoforge = "autoforge.agent.cli:main"
 autoforge-loop = "autoforge.agent.loop:main"
 
-[project.entry-points."autoforge.plugins"]
-dpdk = "autoforge_dpdk:DpdkPlugin"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["autoforge", "autoforge_dpdk"]
+packages = ["autoforge"]
 
 [tool.ruff]
 line-length = 100

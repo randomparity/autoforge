@@ -42,10 +42,7 @@ def hints_path(arch: str, topic: str = DEFAULT_TOPIC) -> Path:
         msg = f"Unknown arch {arch!r}. Known: {', '.join(sorted(KNOWN_ARCHES))}"
         raise ValueError(msg)
     if topic not in TOPIC_SUFFIXES:
-        msg = (
-            f"Unknown topic {topic!r}."
-            f" Known: {', '.join(sorted(TOPIC_SUFFIXES))}"
-        )
+        msg = f"Unknown topic {topic!r}. Known: {', '.join(sorted(TOPIC_SUFFIXES))}"
         raise ValueError(msg)
     suffix = TOPIC_SUFFIXES[topic]
     path = HINTS_DIR / f"{arch}{suffix}.md"

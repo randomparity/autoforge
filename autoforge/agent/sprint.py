@@ -5,13 +5,14 @@ from __future__ import annotations
 import csv
 import re
 import shutil
+import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from autoforge.agent.campaign import CampaignConfig
 
-SPRINTS_ROOT = Path(__file__).resolve().parent.parent.parent / "sprints"
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SPRINT_NAME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-[a-z0-9][a-z0-9-]*$")
 
 RESULTS_COLUMNS = [
@@ -22,6 +23,25 @@ RESULTS_COLUMNS = [
     "status",
     "description",
 ]
+
+
+def _sprints_root(campaign: CampaignConfig | None = None) -> Path:
+    """Derive the sprints root from campaign config.
+
+    Sprints live under projects/<name>/sprints/ when a project name is set.
+    """
+    if campaign is not None:
+        project_name = campaign.get("project", {}).get("name", "")
+        if project_name:
+            return REPO_ROOT / "projects" / project_name / "sprints"
+    return REPO_ROOT / "sprints"
+
+
+def _sprints_root_from_path(campaign_path: Path) -> Path:
+    """Load campaign TOML and derive sprints root."""
+    with open(campaign_path, "rb") as f:
+        campaign = tomllib.load(f)
+    return _sprints_root(campaign)
 
 
 def validate_sprint_name(name: str) -> None:
@@ -49,7 +69,7 @@ def active_sprint_name(campaign: CampaignConfig) -> str:
 
 def sprint_dir(campaign: CampaignConfig) -> Path:
     """Return the sprint root directory."""
-    return SPRINTS_ROOT / active_sprint_name(campaign)
+    return _sprints_root(campaign) / active_sprint_name(campaign)
 
 
 def requests_dir(campaign: CampaignConfig) -> Path:
@@ -84,7 +104,8 @@ def init_sprint(name: str, campaign_path: Path) -> Path:
     """
     validate_sprint_name(name)
 
-    sdir = SPRINTS_ROOT / name
+    root = _sprints_root_from_path(campaign_path)
+    sdir = root / name
     if sdir.exists():
         msg = f"Sprint directory already exists: {sdir}"
         raise FileExistsError(msg)
@@ -114,14 +135,15 @@ def switch_sprint(name: str, campaign_path: Path) -> None:
         campaign_path: Path to the live campaign.toml.
     """
     validate_sprint_name(name)
-    sdir = SPRINTS_ROOT / name
+    root = _sprints_root_from_path(campaign_path)
+    sdir = root / name
     if not sdir.is_dir():
         msg = f"Sprint not found: {sdir}"
         raise FileNotFoundError(msg)
     _set_sprint_name(campaign_path, name)
 
 
-def list_sprints() -> list[dict]:
+def list_sprints(campaign: CampaignConfig | None = None) -> list[dict]:
     """Return summary info for all sprints.
 
     Returns:
@@ -129,11 +151,12 @@ def list_sprints() -> list[dict]:
         sorted by name (chronological). max_metric is always the
         maximum value regardless of campaign direction.
     """
-    if not SPRINTS_ROOT.is_dir():
+    root = _sprints_root(campaign)
+    if not root.is_dir():
         return []
 
     sprints = []
-    for d in sorted(SPRINTS_ROOT.iterdir()):
+    for d in sorted(root.iterdir()):
         if not d.is_dir() or not SPRINT_NAME_RE.match(d.name):
             continue
 

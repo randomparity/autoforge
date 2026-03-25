@@ -20,9 +20,14 @@ from autoforge.agent.cli import (
 SAMPLE_CAMPAIGN = {
     "campaign": {"name": "test", "max_iterations": 50},
     "metric": {"name": "throughput_mpps", "path": "throughput_mpps", "direction": "maximize"},
-    "test": {"backend": "testpmd", "perf": True},
     "agent": {"poll_interval": 5, "timeout_minutes": 1},
-    "project": {"submodule_path": "dpdk", "optimization_branch": "autosearch/optimize"},
+    "project": {
+        "build": "local-server",
+        "deploy": "local",
+        "test": "testpmd-memif",
+        "submodule_path": "dpdk",
+        "optimization_branch": "autosearch/optimize",
+    },
     "sprint": {"name": "2026-01-01-test"},
 }
 

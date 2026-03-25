@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from autoforge.protocol import (
@@ -73,15 +73,16 @@ def _git_commit_push(path: Path, message: str, retries: int = 3) -> bool:
     return False
 
 
-def find_pending(requests_dir: Path) -> tuple[TestRequest, Path] | None:
-    """Scan the requests directory for the oldest pending request.
+def find_by_status(requests_dir: Path, status: StatusLiteral) -> tuple[TestRequest, Path] | None:
+    """Scan the requests directory for the oldest request with a given status.
 
     Args:
-        requests_dir: Directory to scan for pending JSON request files.
+        requests_dir: Directory to scan for JSON request files.
+        status: The status to match.
 
     Returns:
-        A tuple of (TestRequest, file_path) for the oldest pending request,
-        or None if no pending requests exist.
+        A tuple of (TestRequest, file_path) for the oldest matching request,
+        or None if none found.
     """
     if not requests_dir.is_dir():
         return None
@@ -93,10 +94,15 @@ def find_pending(requests_dir: Path) -> tuple[TestRequest, Path] | None:
         except (ValueError, KeyError, TypeError) as exc:
             logger.warning("Skipping malformed request %s: %s", path.name, exc)
             continue
-        if request.status == STATUS_PENDING:
+        if request.status == status:
             return (request, path)
 
     return None
+
+
+def find_pending(requests_dir: Path) -> tuple[TestRequest, Path] | None:
+    """Scan the requests directory for the oldest pending request."""
+    return find_by_status(requests_dir, STATUS_PENDING)
 
 
 def claim(request: TestRequest, request_path: Path) -> bool:
@@ -113,7 +119,7 @@ def claim(request: TestRequest, request_path: Path) -> bool:
         True if the claim succeeded, False otherwise.
     """
     request.transition_to(STATUS_CLAIMED)
-    request.claimed_at = datetime.now(timezone.utc).isoformat()
+    request.claimed_at = datetime.now(UTC).isoformat()
     request.write(request_path)
 
     pushed = _git_commit_push(
@@ -207,7 +213,7 @@ def fail(
         request_path,
         error=error,
         build_log_snippet=log_snippet,
-        completed_at=datetime.now(timezone.utc).isoformat(),
+        completed_at=datetime.now(UTC).isoformat(),
     )
     if not pushed:
         logger.critical(

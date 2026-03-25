@@ -20,9 +20,10 @@ SAMPLE_CAMPAIGN = {
         "path": "results.throughput_mpps",
         "direction": "maximize",
     },
-    "test": {
-        "test_suites": ["TestPmd"],
-        "perf": True,
+    "project": {
+        "build": "local-server",
+        "deploy": "local",
+        "test": "testpmd-memif",
     },
 }
 

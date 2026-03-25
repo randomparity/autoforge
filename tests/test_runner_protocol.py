@@ -11,9 +11,10 @@ SAMPLE_CAMPAIGN = {
         "name": "throughput_mpps",
         "path": "results.throughput_mpps",
     },
-    "test": {
-        "test_suites": ["TestPmd"],
-        "perf": True,
+    "project": {
+        "build": "local-server",
+        "deploy": "local",
+        "test": "testpmd-memif",
     },
 }
 

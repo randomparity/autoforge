@@ -39,9 +39,14 @@ class TestBelowThreshold:
 SAMPLE_CAMPAIGN = {
     "campaign": {"name": "test", "max_iterations": 50},
     "metric": {"name": "throughput_mpps", "path": "throughput_mpps", "direction": "maximize"},
-    "test": {"backend": "testpmd", "perf": True, "test_suites": ["TestPmd"]},
     "agent": {"poll_interval": 5, "timeout_minutes": 1},
-    "project": {"submodule_path": "dpdk", "optimization_branch": "autosearch/optimize"},
+    "project": {
+        "build": "local-server",
+        "deploy": "local",
+        "test": "testpmd-memif",
+        "submodule_path": "dpdk",
+        "optimization_branch": "autosearch/optimize",
+    },
     "sprint": {"name": "2026-01-01-test"},
 }
 
@@ -80,9 +85,9 @@ class TestRunBaseline:
         assert len(request_files) == 1
         data = json.loads(request_files[0].read_text())
         assert data["source_commit"] == fake_commit
-        assert data["perf"] is True
         assert data["status"] == "pending"
-        assert data["backend"] == "testpmd"
+        assert data["build_plugin"] == "local-server"
+        assert data["test_plugin"] == "testpmd-memif"
         assert data["description"] == "Baseline: unmodified DPDK"
 
     def test_dry_run_does_not_poll(self, tmp_path: Path) -> None:

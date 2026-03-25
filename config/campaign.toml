@@ -17,12 +17,6 @@ direction = "maximize"
 # Stop early if improvement between iterations falls below this value
 threshold = 0.01
 
-[test]
-# Test backend: "testpmd" for direct measurement, "dts" for DPDK Test Suite
-backend = "testpmd"
-test_suites = ["TestPmd"]
-perf = true
-
 [agent]
 # Seconds between polling for test results
 poll_interval = 30
@@ -58,10 +52,13 @@ guarded by architecture ifdefs (RTE_ARCH_PPC_64) where appropriate.
 enabled = true
 
 [project]
-# Plugin name — selects the autoforge plugin (e.g., "dpdk", "vllm", "kernel")
-plugin = "dpdk"
+name = "dpdk"
+build = "local-server"
+deploy = "local"
+test = "testpmd-memif"
+profiler = "perf-record"
 # Path to the source git submodule relative to repo root
-submodule_path = "dpdk"
+submodule_path = "projects/dpdk/repo"
 # Branch in the submodule where good changes accumulate
 optimization_branch = "autosearch/optimize"
 # Source paths the agent is allowed to modify (relative to submodule_path)

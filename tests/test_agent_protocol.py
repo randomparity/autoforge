@@ -10,11 +10,12 @@ from autoforge.protocol import STATUS_PENDING, TestRequest
 SAMPLE_CAMPAIGN = {
     "metric": {
         "name": "throughput_mpps",
-        "path": "test_runs.0.test_suites.0.test_cases.0.throughput_mpps",
+        "path": "throughput_mpps",
     },
-    "test": {
-        "test_suites": ["TestPmd"],
-        "perf": True,
+    "project": {
+        "build": "local-server",
+        "deploy": "local",
+        "test": "testpmd-memif",
     },
 }
 
@@ -58,8 +59,9 @@ class TestCreateRequest:
         assert data["sequence"] == 1
         assert data["source_commit"] == "abc123"
         assert data["status"] == STATUS_PENDING
-        assert data["test_suites"] == ["TestPmd"]
-        assert data["perf"] is True
+        assert data["build_plugin"] == "local-server"
+        assert data["deploy_plugin"] == "local"
+        assert data["test_plugin"] == "testpmd-memif"
 
     def test_request_has_metric_fields(self, tmp_path) -> None:
         path = create_request(
@@ -71,7 +73,7 @@ class TestCreateRequest:
         )
         data = json.loads(path.read_text())
         assert data["metric_name"] == "throughput_mpps"
-        assert "test_runs.0" in data["metric_path"]
+        assert data["metric_path"] == "throughput_mpps"
 
 
 class TestReadRequest:

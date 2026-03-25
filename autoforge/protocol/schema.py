@@ -7,11 +7,24 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-StatusLiteral = Literal["pending", "claimed", "building", "running", "completed", "failed"]
+StatusLiteral = Literal[
+    "pending",
+    "claimed",
+    "building",
+    "built",
+    "deploying",
+    "deployed",
+    "running",
+    "completed",
+    "failed",
+]
 
 STATUS_PENDING: StatusLiteral = "pending"
 STATUS_CLAIMED: StatusLiteral = "claimed"
 STATUS_BUILDING: StatusLiteral = "building"
+STATUS_BUILT: StatusLiteral = "built"
+STATUS_DEPLOYING: StatusLiteral = "deploying"
+STATUS_DEPLOYED: StatusLiteral = "deployed"
 STATUS_RUNNING: StatusLiteral = "running"
 STATUS_COMPLETED: StatusLiteral = "completed"
 STATUS_FAILED: StatusLiteral = "failed"
@@ -21,6 +34,9 @@ VALID_STATUSES = frozenset(
         STATUS_PENDING,
         STATUS_CLAIMED,
         STATUS_BUILDING,
+        STATUS_BUILT,
+        STATUS_DEPLOYING,
+        STATUS_DEPLOYED,
         STATUS_RUNNING,
         STATUS_COMPLETED,
         STATUS_FAILED,
@@ -30,7 +46,10 @@ VALID_STATUSES = frozenset(
 VALID_TRANSITIONS: dict[str, frozenset[str]] = {
     STATUS_PENDING: frozenset({STATUS_CLAIMED, STATUS_FAILED}),
     STATUS_CLAIMED: frozenset({STATUS_BUILDING, STATUS_FAILED}),
-    STATUS_BUILDING: frozenset({STATUS_RUNNING, STATUS_FAILED}),
+    STATUS_BUILDING: frozenset({STATUS_BUILT, STATUS_FAILED}),
+    STATUS_BUILT: frozenset({STATUS_DEPLOYING, STATUS_FAILED}),
+    STATUS_DEPLOYING: frozenset({STATUS_DEPLOYED, STATUS_FAILED}),
+    STATUS_DEPLOYED: frozenset({STATUS_RUNNING, STATUS_FAILED}),
     STATUS_RUNNING: frozenset({STATUS_COMPLETED, STATUS_FAILED}),
     STATUS_COMPLETED: frozenset(),
     STATUS_FAILED: frozenset(),
@@ -46,17 +65,31 @@ class TestRequest:
     sequence: int
     created_at: str
     source_commit: str
-    test_suites: list[str]
-    test_cases: list[str] | None
-    perf: bool
-    metric_name: str
-    metric_path: str
     description: str
-    backend: str = "testpmd"
-    status: StatusLiteral = STATUS_PENDING
 
+    # Independent plugin selection
+    build_plugin: str
+    deploy_plugin: str
+    test_plugin: str
+    profile_plugin: str = ""
+
+    # Test spec
+    metric_name: str = ""
+    metric_path: str = ""
+
+    # Status
+    status: StatusLiteral = STATUS_PENDING
     claimed_at: str | None = None
+    built_at: str | None = None
+    deployed_at: str | None = None
     completed_at: str | None = None
+
+    # Runner tracking
+    build_runner_id: str | None = None
+    deploy_runner_id: str | None = None
+    test_runner_id: str | None = None
+
+    # Results
     build_log_snippet: str | None = None
     results_json: dict[str, Any] | None = None
     results_summary: str | None = None
@@ -83,9 +116,6 @@ class TestRequest:
     def from_json(cls, raw: str) -> TestRequest:
         """Deserialize from a JSON string."""
         data = json.loads(raw)
-        # Temporary migration: accept legacy "dpdk_commit" key
-        if "dpdk_commit" in data and "source_commit" not in data:
-            data["source_commit"] = data.pop("dpdk_commit")
         return cls(**data)
 
     @classmethod

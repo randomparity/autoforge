@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from autoforge.plugins.loader import list_plugins, load_plugin
+from autoforge.plugins.loader import (
+    PipelineComponents,
+    list_components,
+    load_component,
+    load_pipeline,
+)
 from autoforge.plugins.protocols import (
     Builder,
     BuildResult,
     Deployer,
     DeployResult,
-    Plugin,
+    Profiler,
+    ProfileResult,
     Tester,
     TestResult,
 )
@@ -18,9 +24,12 @@ __all__ = [
     "Builder",
     "DeployResult",
     "Deployer",
-    "Plugin",
+    "PipelineComponents",
+    "ProfileResult",
+    "Profiler",
     "TestResult",
     "Tester",
-    "list_plugins",
-    "load_plugin",
+    "list_components",
+    "load_component",
+    "load_pipeline",
 ]

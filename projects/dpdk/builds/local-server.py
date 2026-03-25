@@ -1,4 +1,4 @@
-"""DPDK build orchestration — meson + ninja."""
+"""DPDK build orchestration — meson + ninja on the local machine."""
 
 from __future__ import annotations
 
@@ -22,8 +22,10 @@ def _truncate_log(log: str, max_lines: int = 200) -> str:
     return "\n".join(lines[-max_lines:])
 
 
-class DpdkBuilder:
+class LocalServerBuilder:
     """Builds DPDK from source using meson + ninja."""
+
+    name = "local-server"
 
     def __init__(self) -> None:
         self._build_config: dict[str, Any] = {}
@@ -31,9 +33,7 @@ class DpdkBuilder:
     def configure(self, project_config: dict[str, Any], runner_config: dict[str, Any]) -> None:
         self._build_config = runner_config.get("build", {})
 
-    def build(
-        self, source_path: Path, commit: str, build_dir: Path, timeout: int
-    ) -> BuildResult:
+    def build(self, source_path: Path, commit: str, build_dir: Path, timeout: int) -> BuildResult:
         cfg = self._build_config
         start = time.monotonic()
         combined_log: list[str] = []

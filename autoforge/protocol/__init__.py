@@ -2,8 +2,11 @@
 
 from autoforge.protocol.schema import (
     STATUS_BUILDING,
+    STATUS_BUILT,
     STATUS_CLAIMED,
     STATUS_COMPLETED,
+    STATUS_DEPLOYED,
+    STATUS_DEPLOYING,
     STATUS_FAILED,
     STATUS_PENDING,
     STATUS_RUNNING,
@@ -19,8 +22,11 @@ from autoforge.protocol.schema import (
 
 __all__ = [
     "STATUS_BUILDING",
+    "STATUS_BUILT",
     "STATUS_CLAIMED",
     "STATUS_COMPLETED",
+    "STATUS_DEPLOYED",
+    "STATUS_DEPLOYING",
     "STATUS_FAILED",
     "STATUS_PENDING",
     "STATUS_RUNNING",
