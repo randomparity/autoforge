@@ -59,6 +59,12 @@ class ProfilingConfig(TypedDict, total=False):
     enabled: bool
 
 
+class SprintConfig(TypedDict, total=False):
+    """Active sprint from campaign TOML."""
+
+    name: str
+
+
 class CampaignConfig(TypedDict, total=False):
     """Full campaign configuration as loaded from TOML."""
 
@@ -69,6 +75,7 @@ class CampaignConfig(TypedDict, total=False):
     dpdk: DpdkConfig
     goal: GoalConfig
     profiling: ProfilingConfig
+    sprint: SprintConfig
 
 
 def load_campaign(path: Path | None = None) -> CampaignConfig:

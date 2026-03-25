@@ -79,9 +79,21 @@ src/perf/        Profiling: perf record orchestration, stack analysis, arch prof
 
 Read `program.md` for autonomous optimization instructions. The agent uses CLI subcommands (`uv run autosearch context/submit/poll/judge`) to interact with the remote runner. Start with: "read program.md and start experimenting".
 
-## Working with request/result files
+## Sprint organization
 
-`requests/*.json`, `results.tsv`, and `failures.tsv` are live performance tracking data used by the optimization loop. Never commit test or scratch request files — they will pollute the real results history. If you create request files during development or testing, delete them before committing. Tests should use `tmp_path` fixtures, not the repo's `requests/` directory.
+All experiment artifacts are organized per-sprint under `sprints/<name>/`:
+```
+sprints/2026-03-23-memif-ppc64le/
+  campaign.toml     # frozen snapshot of campaign config
+  requests/         # request JSON files
+  results.tsv       # iteration history
+  failures.tsv      # failed optimization attempts
+  docs/             # summary, graphs
+```
+
+The active sprint is set in `config/campaign.toml` under `[sprint] name = "..."`. Use `uv run autosearch sprint init <name>` to create a new sprint. Sprint names must match `YYYY-MM-DD-slug` format.
+
+Never commit test or scratch request files — they will pollute the real results history. Tests should use `tmp_path` fixtures, not sprint directories.
 
 ## Pull requests
 

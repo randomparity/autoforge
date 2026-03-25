@@ -8,7 +8,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from src.protocol import (
-    DEFAULT_REQUESTS_DIR,
     STATUS_CLAIMED,
     STATUS_FAILED,
     STATUS_PENDING,
@@ -85,11 +84,10 @@ def find_pending(requests_dir: Path | None = None) -> tuple[TestRequest, Path] |
         A tuple of (TestRequest, file_path) for the oldest pending request,
         or None if no pending requests exist.
     """
-    directory = requests_dir or DEFAULT_REQUESTS_DIR
-    if not directory.is_dir():
+    if not requests_dir.is_dir():
         return None
 
-    json_files = sorted(directory.glob("*.json"))
+    json_files = sorted(requests_dir.glob("*.json"))
     for path in json_files:
         try:
             request = TestRequest.read(path)

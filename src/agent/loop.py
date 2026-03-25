@@ -16,6 +16,7 @@ from src.agent.git_ops import (
 from src.agent.history import append_result, best_result, load_history
 from src.agent.metric import below_threshold
 from src.agent.protocol import create_request, next_sequence, poll_for_completion
+from src.agent.sprint import failures_path, requests_dir, results_path
 from src.agent.strategy import (
     extract_profile_summary,
     format_context,
@@ -36,7 +37,11 @@ def run_interactive_iteration(
 
     Returns True to continue, False to stop.
     """
-    history = load_history()
+    req = requests_dir(campaign)
+    res = results_path(campaign)
+    fail = failures_path(campaign)
+
+    history = load_history(res)
     metric_cfg = campaign["metric"]
     direction = metric_cfg.get("direction", "maximize")
     max_iter = campaign.get("campaign", {}).get("max_iterations", 50)
@@ -61,11 +66,11 @@ def run_interactive_iteration(
 
     commit = git_submodule_head(dpdk_path)
     description = input("Describe this change: ").strip() or "No description"
-    seq = next_sequence()
+    seq = next_sequence(req)
     poll_interval = campaign.get("agent", {}).get("poll_interval", 30)
     timeout = campaign.get("agent", {}).get("timeout_minutes", 60) * 60
 
-    request_path = create_request(seq, commit, campaign, description)
+    request_path = create_request(seq, commit, campaign, description, req)
 
     git_add_commit_push(
         [str(request_path), str(dpdk_path)],
@@ -76,19 +81,21 @@ def run_interactive_iteration(
 
     if dry_run:
         print("[dry-run] Skipping poll — no push was made.")
-        append_result(seq, commit, None, "dry_run", description)
+        append_result(seq, commit, None, "dry_run", description, path=res)
         return True
 
     try:
-        result = poll_for_completion(seq, timeout=timeout, interval=poll_interval)
+        result = poll_for_completion(
+            seq, timeout=timeout, interval=poll_interval, requests_dir=req,
+        )
     except TimeoutError:
         print(f"Request {seq:04d} timed out.")
-        append_result(seq, commit, None, "timed_out", description)
+        append_result(seq, commit, None, "timed_out", description, path=res)
         return True
 
     if result.status == "failed":
         print(f"Request {seq:04d} FAILED: {result.error}")
-        append_result(seq, commit, None, "failed", description)
+        append_result(seq, commit, None, "failed", description, path=res)
         return True
 
     metric = result.metric_value
@@ -99,13 +106,14 @@ def run_interactive_iteration(
         for line in format_profile_lines(profile_summary):
             print(line)
 
-    current_best = best_result(direction=direction)
+    current_best = best_result(res, direction=direction)
     best_val = float(current_best["metric_value"]) if current_best is not None else None
 
-    append_result(seq, commit, metric, "completed", description)
+    append_result(seq, commit, metric, "completed", description, path=res)
 
     record_result_or_revert(
         metric, best_val, direction, seq, commit, description, dpdk_path, dry_run,
+        results_path=res, failures_path=fail,
     )
 
     if below_threshold(metric, best_val, campaign):
@@ -121,18 +129,15 @@ def run_baseline(
     dpdk_path: Path,
     dry_run: bool,
 ) -> None:
-    """Submit a baseline request for the current DPDK commit and wait for results.
-
-    Creates a test request with no code changes to exercise the full
-    agent -> runner pipeline. Does not record to history or trigger revert logic.
-    """
+    """Submit a baseline request for the current DPDK commit and wait for results."""
+    req = requests_dir(campaign)
     commit = git_submodule_head(dpdk_path)
-    seq = next_sequence()
+    seq = next_sequence(req)
     description = "Baseline: unmodified DPDK"
     poll_interval = campaign.get("agent", {}).get("poll_interval", 30)
     timeout = campaign.get("agent", {}).get("timeout_minutes", 60) * 60
 
-    request_path = create_request(seq, commit, campaign, description)
+    request_path = create_request(seq, commit, campaign, description, req)
 
     git_add_commit_push(
         [str(request_path)],
@@ -146,7 +151,9 @@ def run_baseline(
         return
 
     try:
-        result = poll_for_completion(seq, timeout=timeout, interval=poll_interval)
+        result = poll_for_completion(
+            seq, timeout=timeout, interval=poll_interval, requests_dir=req,
+        )
     except TimeoutError:
         print(f"Baseline request {seq:04d} timed out.")
         return

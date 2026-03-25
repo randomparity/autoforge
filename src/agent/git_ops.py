@@ -122,6 +122,8 @@ def record_result_or_revert(
     description: str,
     dpdk_path: Path,
     dry_run: bool,
+    results_path: Path,
+    failures_path: Path,
 ) -> bool:
     """Record a successful result or revert the change and record a failure.
 
@@ -137,14 +139,14 @@ def record_result_or_revert(
             if best_val is not None
             else f"Baseline: {metric}"
         )
-        files = ["results.tsv", str(dpdk_path)]
+        files = [str(results_path), str(dpdk_path)]
         git_add_commit_push(files, f"results: iteration {seq:04d}", dry_run=dry_run)
     else:
         print(f"No improvement ({metric} vs best {best_val}). Reverting.")
         diff_summary = get_diff_summary(dpdk_path)
         revert_last_change(dpdk_path)
-        append_failure(commit, metric, description, diff_summary)
-        files = ["results.tsv", "failures.tsv", str(dpdk_path)]
+        append_failure(commit, metric, description, diff_summary, path=failures_path)
+        files = [str(results_path), str(failures_path), str(dpdk_path)]
         git_add_commit_push(files, f"revert: iteration {seq:04d}", dry_run=dry_run)
 
     return improved

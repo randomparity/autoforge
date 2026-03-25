@@ -12,12 +12,27 @@ from src.agent.git_ops import (
     git_submodule_head,
     record_result_or_revert,
 )
-from src.agent.history import append_result, best_result, load_failures, load_history
+from src.agent.history import (
+    append_result,
+    best_result,
+    format_failures,
+    load_failures,
+    load_history,
+)
 from src.agent.protocol import (
     create_request,
     find_latest_request,
     next_sequence,
     poll_for_completion,
+)
+from src.agent.sprint import (
+    active_sprint_name,
+    failures_path,
+    init_sprint,
+    list_sprints,
+    requests_dir,
+    results_path,
+    switch_sprint,
 )
 from src.agent.strategy import (
     extract_profile_summary,
@@ -26,24 +41,46 @@ from src.agent.strategy import (
     validate_change,
 )
 
+DEFAULT_CAMPAIGN = Path("config/campaign.toml")
+
 
 def _dpdk_path(campaign: CampaignConfig) -> Path:
     return Path(campaign.get("dpdk", {}).get("submodule_path", "dpdk"))
 
 
+def _req_dir(campaign: CampaignConfig) -> Path:
+    return requests_dir(campaign)
+
+
+def _res_path(campaign: CampaignConfig) -> Path:
+    return results_path(campaign)
+
+
+def _fail_path(campaign: CampaignConfig) -> Path:
+    return failures_path(campaign)
+
+
 def cmd_context(campaign: CampaignConfig) -> None:
     """Print current optimization state."""
-    history = load_history()
-    failures = load_failures()
+    res = _res_path(campaign)
+    fail = _fail_path(campaign)
+    req = _req_dir(campaign)
 
-    latest = find_latest_request()
+    history = load_history(res)
+    fails = load_failures(fail)
+
+    latest = find_latest_request(req)
     profile = extract_profile_summary(latest) if latest else None
+
+    try:
+        name = active_sprint_name(campaign)
+        print(f"Sprint: {name}")
+    except KeyError:
+        pass
 
     print(format_context(history, campaign, profile_summary=profile))
 
-    from src.agent.history import format_failures
-
-    fail_text = format_failures(failures)
+    fail_text = format_failures(fails)
     if fail_text:
         print()
         print(fail_text)
@@ -52,14 +89,15 @@ def cmd_context(campaign: CampaignConfig) -> None:
 def cmd_submit(campaign: CampaignConfig, description: str, dry_run: bool) -> None:
     """Validate submodule change, create request, commit, push."""
     dpdk_path = _dpdk_path(campaign)
+    req = _req_dir(campaign)
 
     if not validate_change(dpdk_path):
         print("ERROR: No submodule change detected. Commit in the submodule first.")
         sys.exit(1)
 
     commit = git_submodule_head(dpdk_path)
-    seq = next_sequence()
-    request_path = create_request(seq, commit, campaign, description)
+    seq = next_sequence(req)
+    request_path = create_request(seq, commit, campaign, description, req)
 
     git_add_commit_push(
         [str(request_path), str(dpdk_path)],
@@ -71,7 +109,8 @@ def cmd_submit(campaign: CampaignConfig, description: str, dry_run: bool) -> Non
 
 def cmd_poll(campaign: CampaignConfig) -> None:
     """Poll until the latest request reaches a terminal state."""
-    latest = find_latest_request()
+    req = _req_dir(campaign)
+    latest = find_latest_request(req)
     if latest is None:
         print("No requests found.")
         sys.exit(1)
@@ -86,6 +125,7 @@ def cmd_poll(campaign: CampaignConfig) -> None:
     try:
         result = poll_for_completion(
             latest.sequence, timeout=timeout, interval=poll_interval,
+            requests_dir=req,
         )
     except TimeoutError:
         print(f"Request {latest.sequence:04d} timed out.")
@@ -115,9 +155,12 @@ def _print_result(result: object) -> None:
 def cmd_judge(campaign: CampaignConfig, dry_run: bool) -> None:
     """Compare latest result to best, keep or revert, record in TSV."""
     dpdk_path = _dpdk_path(campaign)
+    req = _req_dir(campaign)
+    res = _res_path(campaign)
+    fail = _fail_path(campaign)
     direction = campaign.get("metric", {}).get("direction", "maximize")
 
-    latest = find_latest_request()
+    latest = find_latest_request(req)
     if latest is None:
         print("No requests found.")
         sys.exit(1)
@@ -130,25 +173,27 @@ def cmd_judge(campaign: CampaignConfig, dry_run: bool) -> None:
     commit = latest.dpdk_commit
     description = latest.description or ""
 
-    current_best = best_result(direction=direction)
+    current_best = best_result(res, direction=direction)
     best_val = float(current_best["metric_value"]) if current_best else None
 
-    append_result(latest.sequence, commit, metric, latest.status, description)
+    append_result(latest.sequence, commit, metric, latest.status, description, path=res)
 
     record_result_or_revert(
         metric, best_val, direction,
         latest.sequence, commit, description, dpdk_path, dry_run,
+        results_path=res, failures_path=fail,
     )
 
 
 def cmd_baseline(campaign: CampaignConfig, dry_run: bool) -> None:
     """Submit a baseline request (no code changes) and optionally poll."""
     dpdk_path = _dpdk_path(campaign)
+    req = _req_dir(campaign)
     commit = git_submodule_head(dpdk_path)
-    seq = next_sequence()
+    seq = next_sequence(req)
     description = "Baseline: unmodified DPDK"
 
-    request_path = create_request(seq, commit, campaign, description)
+    request_path = create_request(seq, commit, campaign, description, req)
     git_add_commit_push(
         [str(request_path)],
         f"baseline {seq:04d}: {description}",
@@ -164,7 +209,9 @@ def cmd_baseline(campaign: CampaignConfig, dry_run: bool) -> None:
     timeout = campaign.get("agent", {}).get("timeout_minutes", 60) * 60
 
     try:
-        result = poll_for_completion(seq, timeout=timeout, interval=poll_interval)
+        result = poll_for_completion(
+            seq, timeout=timeout, interval=poll_interval, requests_dir=req,
+        )
     except TimeoutError:
         print(f"Baseline request {seq:04d} timed out.")
         return
@@ -174,12 +221,52 @@ def cmd_baseline(campaign: CampaignConfig, dry_run: bool) -> None:
 
 def cmd_status(campaign: CampaignConfig) -> None:
     """Print the latest request status without polling."""
-    latest = find_latest_request()
+    req = _req_dir(campaign)
+    latest = find_latest_request(req)
     if latest is None:
         print("No requests found.")
         return
-
     _print_result(latest)
+
+
+def cmd_sprint_init(name: str, campaign_path: Path) -> None:
+    """Create a new sprint directory."""
+    try:
+        sdir = init_sprint(name, campaign_path)
+    except (ValueError, FileExistsError) as exc:
+        print(f"ERROR: {exc}")
+        sys.exit(1)
+    print(f"Sprint initialized: {sdir}")
+    print("  requests/  docs/  campaign.toml  results.tsv")
+
+
+def cmd_sprint_list(campaign: CampaignConfig) -> None:
+    """List all sprints with summary."""
+    sprints = list_sprints()
+    if not sprints:
+        print("No sprints found.")
+        return
+
+    try:
+        active = active_sprint_name(campaign)
+    except KeyError:
+        active = None
+
+    print("Sprints:")
+    for s in sprints:
+        marker = " *" if s["name"] == active else "  "
+        best = f"{s['best_metric']:.2f} Mpps" if s["best_metric"] else "no data"
+        label = "(active)" if s["name"] == active else ""
+        print(f"{marker} {s['name']:40s} {label:10s} {s['iterations']:3d} iterations, best: {best}")
+
+
+def cmd_sprint_active(campaign: CampaignConfig) -> None:
+    """Print the active sprint name."""
+    try:
+        print(active_sprint_name(campaign))
+    except KeyError as exc:
+        print(f"ERROR: {exc}")
+        sys.exit(1)
 
 
 def main() -> None:
@@ -204,12 +291,39 @@ def main() -> None:
         "--description", "-d", required=True, help="Description of the change",
     )
 
+    # Sprint subcommands
+    sprint_p = sub.add_parser("sprint", help="Sprint management")
+    sprint_sub = sprint_p.add_subparsers(dest="sprint_command", required=True)
+
+    init_p = sprint_sub.add_parser("init", help="Create a new sprint")
+    init_p.add_argument("name", help="Sprint name (YYYY-MM-DD-slug)")
+
+    sprint_sub.add_parser("list", help="List all sprints")
+    sprint_sub.add_parser("active", help="Print active sprint name")
+
+    switch_p = sprint_sub.add_parser("switch", help="Switch to an existing sprint")
+    switch_p.add_argument("name", help="Sprint name to switch to")
+
     args = parser.parse_args()
 
-    campaign_path = Path(args.campaign) if args.campaign else None
+    campaign_path = Path(args.campaign) if args.campaign else DEFAULT_CAMPAIGN
+
+    # Sprint init doesn't need full campaign loaded
+    if args.command == "sprint" and args.sprint_command == "init":
+        cmd_sprint_init(args.name, campaign_path)
+        return
+
     campaign = load_campaign(campaign_path)
 
-    if args.command == "context":
+    if args.command == "sprint":
+        if args.sprint_command == "list":
+            cmd_sprint_list(campaign)
+        elif args.sprint_command == "active":
+            cmd_sprint_active(campaign)
+        elif args.sprint_command == "switch":
+            switch_sprint(args.name, campaign_path)
+            print(f"Switched to sprint: {args.name}")
+    elif args.command == "context":
         cmd_context(campaign)
     elif args.command == "submit":
         cmd_submit(campaign, args.description, args.dry_run)

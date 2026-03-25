@@ -6,12 +6,15 @@ Autonomous DPDK optimization via iterative experimentation.
 
 To set up a new experiment run, work with the user to:
 
-1. **Read the campaign config**: `config/campaign.toml` defines the metric, scope, goal, and constraints.
-2. **Check history**: `uv run autosearch context` shows current state, best result, recent attempts, profiling data, and past failures.
-3. **Verify the DPDK submodule**: `ls dpdk/` should contain the DPDK source tree.
-4. **Create a branch**: `git checkout -b autoresearch/<tag>` from current HEAD. The tag should be based on today's date (e.g. `mar25`).
-5. **Establish baseline** (if no history): `uv run autosearch baseline` submits the unmodified DPDK for testing and waits for the result.
-6. **Confirm and go**: Confirm setup looks good, then begin experimentation.
+1. **Create a sprint**: `uv run autosearch sprint init YYYY-MM-DD-slug` (e.g. `2026-03-25-memif-zc`).
+2. **Read the campaign config**: `config/campaign.toml` defines the metric, scope, goal, and constraints.
+3. **Check history**: `uv run autosearch context` shows current state, best result, recent attempts, profiling data, and past failures.
+4. **Verify the DPDK submodule**: `ls dpdk/` should contain the DPDK source tree.
+5. **Create a branch**: `git checkout -b autoresearch/<tag>` from current HEAD.
+6. **Establish baseline** (if no history): `uv run autosearch baseline` submits the unmodified DPDK for testing and waits for the result.
+7. **Confirm and go**: Confirm setup looks good, then begin experimentation.
+
+All artifacts (requests, results, failures, docs) are stored under `sprints/<name>/`.
 
 ## Architecture
 
@@ -57,6 +60,9 @@ All commands: `uv run autosearch <subcommand>`
 | `uv run autosearch judge` | Compare result to best, keep or revert, record in TSV |
 | `uv run autosearch baseline` | Submit baseline (no changes), wait for result |
 | `uv run autosearch status` | Print latest request status without polling |
+| `uv run autosearch sprint init <name>` | Create a new sprint (YYYY-MM-DD-slug) |
+| `uv run autosearch sprint list` | List all sprints with iteration counts |
+| `uv run autosearch sprint active` | Print active sprint name |
 
 ## Output format
 

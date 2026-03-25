@@ -42,6 +42,7 @@ SAMPLE_CAMPAIGN = {
     "test": {"backend": "testpmd", "perf": True, "test_suites": ["TestPmd"]},
     "agent": {"poll_interval": 5, "timeout_minutes": 1},
     "dpdk": {"submodule_path": "dpdk", "optimization_branch": "autosearch/optimize"},
+    "sprint": {"name": "2026-01-01-test"},
 }
 
 
@@ -59,17 +60,16 @@ class TestRunBaseline:
             # Make create_request write a real file so we can inspect it
             from src.agent.protocol import create_request as real_create
 
-            def fake_create(seq, commit, campaign, description, requests_dir=None):
+            def fake_create(seq, commit, campaign, description, req_dir):
                 return real_create(seq, commit, campaign, description, requests_dir=requests_dir)
 
-            mock_create.side_effect = lambda seq, commit, campaign, desc: fake_create(
-                seq, commit, campaign, desc, requests_dir=requests_dir
-            )
+            mock_create.side_effect = fake_create
 
             run_baseline(SAMPLE_CAMPAIGN, tmp_path / "dpdk", dry_run=True)
 
+        sprint_req_dir = Path("sprints/2026-01-01-test/requests")
         mock_create.assert_called_once_with(
-            1, fake_commit, SAMPLE_CAMPAIGN, "Baseline: unmodified DPDK"
+            1, fake_commit, SAMPLE_CAMPAIGN, "Baseline: unmodified DPDK", sprint_req_dir
         )
         mock_git.assert_called_once()
         _, kwargs = mock_git.call_args
