@@ -11,12 +11,12 @@
   "metric_path": "throughput_mpps",
   "description": "add descriptor and buffer prefetch to eth_memif_rx fast path",
   "backend": "testpmd",
-  "status": "building",
+  "status": "failed",
   "claimed_at": "2026-03-25T00:54:11.794172+00:00",
-  "completed_at": null,
-  "build_log_snippet": null,
+  "completed_at": "2026-03-25T00:54:13.996848+00:00",
+  "build_log_snippet": "\nfatal: reference is not a tree: a69c4e75ec4fe88da27c5891d41c453480ac7be8\n",
   "results_json": null,
   "results_summary": null,
   "metric_value": null,
-  "error": null
+  "error": "DPDK build failed"
 }
