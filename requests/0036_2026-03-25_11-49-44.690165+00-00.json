@@ -11,7 +11,7 @@
   "metric_path": "throughput_mpps",
   "description": "batch mq->last_tail write in memif_free_stored_mbufs",
   "backend": "testpmd",
-  "status": "claimed",
+  "status": "building",
   "claimed_at": "2026-03-25T11:51:43.411098+00:00",
   "completed_at": null,
   "build_log_snippet": null,
