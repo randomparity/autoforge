@@ -31,3 +31,4 @@ sequence	timestamp	dpdk_commit	metric_value	status	description
 39	2026-03-25T12:10:17.803573+00:00	a3b31b6916887b288a697020585cd3cd2028dadd	121.364	completed	remove useless pointer-array prefetch in zc rx refill loop
 42	2026-03-25T12:18:29.132688+00:00	f2bd5ee0d0205fcd67301b7785e084f7bb526d0f	119.2084	completed	increase MAX_PKT_BURST 32->128 to match testpmd burst size
 44	2026-03-25T13:01:08.784638+00:00	74c54b064961a2c0f4c9d047d0cc0e389e332a77	121.1874	completed	compile-time constant 64 in rte_memcpy for 4x rx loop, enables GCC inline
+45	2026-03-25T13:05:18.052436+00:00	cf6790d805399b1772928fb464ade1d90c410960	121.442	completed	split non-ZC tx into single-seg fast path (no saved_slot/chain) and multi-seg fallback
