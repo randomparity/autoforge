@@ -19,7 +19,10 @@ class DirtyWorkingTreeError(RuntimeError):
 
 
 def check_git_clean() -> None:
-    """Verify the working tree has no unstaged or untracked changes.
+    """Verify the working tree has no unstaged changes that block pull/push.
+
+    Untracked files (``??``) are ignored — they don't block
+    ``git pull --rebase``. Only modified or staged tracked files matter.
 
     Raises DirtyWorkingTreeError with an actionable message if dirty.
     """
@@ -30,9 +33,7 @@ def check_git_clean() -> None:
         timeout=GIT_TIMEOUT,
     )
     dirty = [
-        line
-        for line in result.stdout.splitlines()
-        if line.strip() and not line.startswith("?? .claude/")
+        line for line in result.stdout.splitlines() if line.strip() and not line.startswith("??")
     ]
     if dirty:
         files = "\n  ".join(dirty)

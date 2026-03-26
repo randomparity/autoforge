@@ -46,9 +46,9 @@ class TestCheckGitClean:
             with pytest.raises(DirtyWorkingTreeError, match="some/file.py"):
                 check_git_clean()
 
-    def test_claude_dir_ignored(self) -> None:
+    def test_untracked_files_ignored(self) -> None:
         with patch("autoforge.agent.git_ops.subprocess.run") as mock_run:
-            mock_run.return_value.stdout = "?? .claude/\n"
+            mock_run.return_value.stdout = "?? .claude/\n?? scorecard.png\n"
             check_git_clean()
 
 
