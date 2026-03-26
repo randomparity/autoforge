@@ -1,3 +1,5 @@
 timestamp	source_commit	metric_value	description	diff_summary
 2026-03-26T03:38:40.511639+00:00	050762700a833e571dd82b565e08b812b6d25e4a	162.8654	ppc64le memcpy: use __builtin_memcpy for 64-byte fast path	"lib/eal/ppc/include/rte_memcpy.h | 7 +++++--
  1 file changed, 5 insertions(+), 2 deletions(-)"
+2026-03-26T03:58:42.114472+00:00	1e751d3528565028cad0d8ef9aeff58625d565f4	171.3308	mempool: bulk memcpy in remaining cache get paths	"lib/mempool/rte_mempool.h | 9 ++++-----
+ 1 file changed, 4 insertions(+), 5 deletions(-)"
