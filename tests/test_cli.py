@@ -231,7 +231,7 @@ class TestCmdHints:
 
     def test_list_topics(self, capsys: pytest.CaptureFixture) -> None:
         campaign: dict = {"platform": {"arch": "ppc64le"}}
-        cmd_hints(campaign, arch_override=None, list_topics_flag=True)
+        cmd_hints(campaign, arch_override=None, show_topics=True)
         out = capsys.readouterr().out
         assert "optimization" in out
         assert "perf-counters" in out

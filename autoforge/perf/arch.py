@@ -6,8 +6,20 @@ import json
 import logging
 import platform
 from pathlib import Path
+from typing import Any, TypedDict
 
 logger = logging.getLogger(__name__)
+
+
+class ArchProfile(TypedDict, total=False):
+    """Architecture-specific PMU event profile."""
+
+    arch: str
+    events: dict[str, str]
+    derived_metrics: dict[str, str]
+    heuristics: list[dict[str, Any]]
+    notes: list[str]
+
 
 COMMON_EVENTS = [
     "cycles",
@@ -25,7 +37,7 @@ def detect_arch() -> str:
     return platform.machine()
 
 
-def load_arch_profile(arch: str | None = None) -> dict:
+def load_arch_profile(arch: str | None = None) -> ArchProfile:
     """Load the architecture-specific PMU event profile.
 
     Args:

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from autoforge.agent.git_ops import (
     DirtyWorkingTreeError,
+    ResultContext,
     check_git_clean,
     full_revert,
     git_add_commit_push,
@@ -15,7 +16,7 @@ from autoforge.agent.git_ops import (
     push_submodule,
     record_result_or_revert,
 )
-from autoforge.agent.hints import hints_summary, list_topics, resolve_arch
+from autoforge.agent.hints import hints_file_ref, list_topics
 from autoforge.agent.history import (
     append_result,
     best_result,
@@ -44,18 +45,20 @@ from autoforge.agent.strategy import (
     extract_profile_summary,
     format_context,
     format_profile_lines,
-    validate_change,
+    has_submodule_change,
 )
-from autoforge.campaign import CampaignConfig, load_campaign, resolve_campaign_path
-from autoforge.protocol import TestRequest
-
-
-def _source_path(campaign: CampaignConfig) -> Path:
-    return Path(campaign.get("project", {}).get("submodule_path", "dpdk"))
-
-
-def _optimization_branch(campaign: CampaignConfig) -> str:
-    return campaign.get("project", {}).get("optimization_branch", "")
+from autoforge.campaign import (
+    CampaignConfig,
+    agent_poll_interval,
+    agent_timeout,
+    load_campaign,
+    metric_direction,
+    optimization_branch,
+    platform_arch,
+    resolve_campaign_path,
+    submodule_path,
+)
+from autoforge.protocol import Direction, TestRequest
 
 
 def cmd_context(campaign: CampaignConfig) -> None:
@@ -93,15 +96,15 @@ def cmd_submit(
     """Validate submodule change, create request, commit, push."""
     if not dry_run:
         check_git_clean()
-    source_path = _source_path(campaign)
+    source_path = Path(submodule_path(campaign))
     req = requests_dir()
 
-    if not validate_change(source_path):
+    if not has_submodule_change(source_path):
         print("ERROR: No submodule change detected. Commit in the submodule first.")
         sys.exit(1)
 
     commit = git_submodule_head(source_path)
-    branch = _optimization_branch(campaign)
+    branch = optimization_branch(campaign)
     if branch and not dry_run:
         push_submodule(source_path, branch)
 
@@ -131,14 +134,11 @@ def cmd_poll(campaign: CampaignConfig) -> None:
         _print_result(latest)
         return
 
-    poll_interval = campaign.get("agent", {}).get("poll_interval", 30)
-    timeout = campaign.get("agent", {}).get("timeout_minutes", 60) * 60
-
     try:
         result = poll_for_completion(
             latest.sequence,
-            timeout=timeout,
-            interval=poll_interval,
+            timeout=agent_timeout(campaign),
+            interval=agent_poll_interval(campaign),
             requests_dir=req,
         )
     except TimeoutError:
@@ -170,11 +170,11 @@ def cmd_judge(campaign: CampaignConfig, dry_run: bool) -> None:
     """Compare latest result to best, keep or revert, record in TSV."""
     if not dry_run:
         check_git_clean()
-    source_path = _source_path(campaign)
+    source_path = Path(submodule_path(campaign))
     req = requests_dir()
     res = results_path()
     fail = failures_path()
-    direction = campaign.get("metric", {}).get("direction", "maximize")
+    direction: Direction = metric_direction(campaign)
 
     latest = find_latest_request(req)
     if latest is None:
@@ -203,19 +203,16 @@ def cmd_judge(campaign: CampaignConfig, dry_run: bool) -> None:
         tags=req_tags,
     )
 
-    record_result_or_revert(
-        metric,
-        best_val,
-        direction,
-        latest.sequence,
-        commit,
-        description,
-        source_path,
-        dry_run,
+    ctx = ResultContext(
+        seq=latest.sequence,
+        commit=commit,
+        description=description,
+        source_path=source_path,
         results_path=res,
         failures_path=fail,
-        optimization_branch=_optimization_branch(campaign),
+        optimization_branch=optimization_branch(campaign),
     )
+    record_result_or_revert(metric, best_val, direction, ctx, dry_run=dry_run)
 
 
 def _poll_and_record(
@@ -232,14 +229,11 @@ def _poll_and_record(
         print(f"[dry-run] Request written to {request_path}")
         return
 
-    poll_interval = campaign.get("agent", {}).get("poll_interval", 30)
-    timeout = campaign.get("agent", {}).get("timeout_minutes", 60) * 60
-
     try:
         result = poll_for_completion(
             seq,
-            timeout=timeout,
-            interval=poll_interval,
+            timeout=agent_timeout(campaign),
+            interval=agent_poll_interval(campaign),
             requests_dir=req,
         )
     except TimeoutError:
@@ -272,7 +266,7 @@ def cmd_baseline(campaign: CampaignConfig, dry_run: bool) -> None:
     """Submit a baseline request (no code changes) and optionally poll."""
     if not dry_run:
         check_git_clean()
-    source_path = _source_path(campaign)
+    source_path = Path(submodule_path(campaign))
     req = requests_dir()
     commit = git_submodule_head(source_path)
     seq = next_sequence(req)
@@ -293,15 +287,15 @@ def cmd_finale(campaign: CampaignConfig, dry_run: bool) -> None:
     """Submit a finale request (modified source, no profiling) and poll."""
     if not dry_run:
         check_git_clean()
-    source_path = _source_path(campaign)
+    source_path = Path(submodule_path(campaign))
     req = requests_dir()
 
-    if not validate_change(source_path):
+    if not has_submodule_change(source_path):
         print("ERROR: No submodule change detected. Commit in the submodule first.")
         sys.exit(1)
 
     commit = git_submodule_head(source_path)
-    branch = _optimization_branch(campaign)
+    branch = optimization_branch(campaign)
     if branch and not dry_run:
         push_submodule(source_path, branch)
 
@@ -330,8 +324,8 @@ def cmd_revert(campaign: CampaignConfig, dry_run: bool) -> None:
     """Revert the last DPDK submodule commit and force-push the fork."""
     if not dry_run:
         check_git_clean()
-    source_path = _source_path(campaign)
-    branch = _optimization_branch(campaign)
+    source_path = Path(submodule_path(campaign))
+    branch = optimization_branch(campaign)
 
     old_head = full_revert(source_path, branch, dry_run)
     new_head = git_submodule_head(source_path)
@@ -377,21 +371,21 @@ def cmd_hints(
     campaign: CampaignConfig,
     arch_override: str | None,
     topic: str = "optimization",
-    list_topics_flag: bool = False,
+    show_topics: bool = False,
 ) -> None:
     """Print architecture-specific optimization hints location."""
-    arch = arch_override or resolve_arch(campaign)
+    arch = arch_override or platform_arch(campaign)
     if not arch:
         print("ERROR: No arch specified. Set [platform] arch in campaign.toml or pass --arch.")
         sys.exit(1)
     try:
-        if list_topics_flag:
+        if show_topics:
             topics = list_topics(arch)
             print(f"Available hint topics for {arch}:")
             for t in topics:
                 print(f"  - {t}")
         else:
-            print(hints_summary(arch, topic))
+            print(hints_file_ref(arch, topic))
     except (ValueError, FileNotFoundError) as exc:
         print(f"ERROR: {exc}")
         sys.exit(1)

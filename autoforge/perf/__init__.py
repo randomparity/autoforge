@@ -13,7 +13,7 @@ from autoforge.perf.arch import COMMON_EVENTS, detect_arch, load_arch_profile
 from autoforge.perf.diff import diff_counters, diff_stacks, load_folded
 from autoforge.perf.gate import EXIT_ERROR, EXIT_FAIL, EXIT_PASS, EXIT_WARN, check_regression
 from autoforge.perf.profile import (
-    ProfileResult,
+    PerfCaptureResult,
     fold_stacks,
     parse_perf_stat,
     profile_pid,
@@ -26,7 +26,7 @@ __all__ = [
     "EXIT_FAIL",
     "EXIT_PASS",
     "EXIT_WARN",
-    "ProfileResult",
+    "PerfCaptureResult",
     "check_regression",
     "compute_derived_metrics",
     "detect_arch",

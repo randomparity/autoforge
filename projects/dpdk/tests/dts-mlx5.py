@@ -8,10 +8,13 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from autoforge.plugins.protocols import DeployResult, TestResult
 from autoforge.protocol import extract_metric
+
+if TYPE_CHECKING:
+    from autoforge.campaign import ProjectConfig
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +39,7 @@ class DtsMlx5Tester:
     def __init__(self) -> None:
         self._runner_config: dict[str, Any] = {}
 
-    def configure(self, project_config: dict[str, Any], runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
         self._runner_config = runner_config
 
     def test(self, deploy_result: DeployResult, timeout: int) -> TestResult:

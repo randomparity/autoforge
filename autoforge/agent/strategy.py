@@ -2,27 +2,36 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import subprocess
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from autoforge.agent.hints import resolve_arch
+from autoforge.agent.hints import workload_hints
+from autoforge.campaign import platform_arch
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from autoforge.campaign import CampaignConfig
     from autoforge.protocol import TestRequest
+
+from autoforge.campaign import (
+    CampaignConfig,
+    campaign_meta,
+    campaign_name,
+    goal_description,
+    metric_direction,
+    metric_name,
+    project_config,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def format_context(
-    history: list[dict],
+    history: list[dict[str, str]],
     campaign: CampaignConfig,
     *,
-    profile_summary: dict | None = None,
+    profile_summary: dict[str, Any] | None = None,
 ) -> str:
     """Build a prompt-friendly summary of campaign state and history.
 
@@ -34,17 +43,16 @@ def format_context(
     Returns:
         A multi-line string suitable for display or prompt injection.
     """
-    metric_cfg = campaign.get("metric", {})
-    project_cfg = campaign.get("project", {})
-    campaign_cfg = campaign.get("campaign", {})
+    proj_cfg = project_config(campaign)
+    camp_meta = campaign_meta(campaign)
 
-    goal = campaign.get("goal", {}).get("description", "").strip()
+    goal = goal_description(campaign)
 
     lines = [
-        f"Campaign: {campaign_cfg.get('name', 'unnamed')}",
-        f"Objective: {metric_cfg.get('direction', 'maximize')} {metric_cfg.get('name', '?')}",
-        f"Project scope: {', '.join(project_cfg.get('scope', []))}",
-        f"Iterations: {len(history)} / {campaign_cfg.get('max_iterations', '?')}",
+        f"Campaign: {campaign_name(campaign)}",
+        f"Objective: {metric_direction(campaign)} {metric_name(campaign)}",
+        f"Project scope: {', '.join(proj_cfg.get('scope', []))}",
+        f"Iterations: {len(history)} / {camp_meta.get('max_iterations', '?')}",
         "",
     ]
 
@@ -54,7 +62,7 @@ def format_context(
 
     scored = _scored_rows(history)
     if scored:
-        selector = min if metric_cfg.get("direction") == "minimize" else max
+        selector = min if metric_direction(campaign) == "minimize" else max
         best_val, best_row = selector(scored, key=lambda x: x[0])
         lines.append(f"Best so far: {best_val} ({best_row.get('description', '?')})")
     else:
@@ -74,10 +82,8 @@ def format_context(
         lines.append("")
         lines.extend(format_profile_lines(profile_summary))
 
-    arch = resolve_arch(campaign)
+    arch = platform_arch(campaign)
     if arch and profile_summary:
-        from autoforge.agent.hints import workload_hints
-
         wh = workload_hints(arch, profile_summary)
         if wh:
             lines.append("")
@@ -90,7 +96,7 @@ def format_context(
     return "\n".join(lines)
 
 
-def _scored_rows(history: list[dict]) -> list[tuple[float, dict]]:
+def _scored_rows(history: list[dict[str, str]]) -> list[tuple[float, dict[str, str]]]:
     """Extract rows with valid numeric metric values."""
     scored = []
     for row in history:
@@ -103,7 +109,7 @@ def _scored_rows(history: list[dict]) -> list[tuple[float, dict]]:
     return scored
 
 
-def format_profile_lines(summary: dict) -> list[str]:
+def format_profile_lines(summary: dict[str, Any]) -> list[str]:
     """Format profiling data for prompt context.
 
     Args:
@@ -134,7 +140,7 @@ def format_profile_lines(summary: dict) -> list[str]:
     return lines
 
 
-def extract_profile_summary(result: TestRequest) -> dict | None:
+def extract_profile_summary(result: TestRequest) -> dict[str, Any] | None:
     """Extract profiling summary from a completed test result.
 
     Args:
@@ -146,19 +152,13 @@ def extract_profile_summary(result: TestRequest) -> dict | None:
     raw = result.results_json
     if raw is None:
         return None
-    if isinstance(raw, str):
-        try:
-            data = json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
-            return None
-    elif isinstance(raw, dict):
-        data = raw
-    else:
+    if not isinstance(raw, dict):
+        logger.debug("results_json is not a dict, got %s", type(raw).__name__)
         return None
-    return data.get("profiling")
+    return raw.get("profiling")
 
 
-def validate_change(source_path: Path) -> bool:
+def has_submodule_change(source_path: Path) -> bool:
     """Check whether the source submodule pointer differs from the outer repo.
 
     Args:
@@ -167,6 +167,9 @@ def validate_change(source_path: Path) -> bool:
     Returns:
         True if the outer repo's submodule pointer has changed (i.e. the
         submodule has a different commit than what is currently tracked).
+
+    Raises:
+        subprocess.CalledProcessError: If the git diff command fails.
     """
     outer_diff = subprocess.run(
         ["git", "diff", "--submodule=short", "--", str(source_path)],
@@ -174,6 +177,13 @@ def validate_change(source_path: Path) -> bool:
         text=True,
         timeout=30,
     )
+    if outer_diff.returncode != 0:
+        raise subprocess.CalledProcessError(
+            outer_diff.returncode,
+            outer_diff.args,
+            outer_diff.stdout,
+            outer_diff.stderr,
+        )
     has_change = bool(outer_diff.stdout.strip())
     if not has_change:
         logger.warning("No submodule pointer change detected in %s", source_path)

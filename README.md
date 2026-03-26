@@ -49,7 +49,8 @@ autoforge/
   protocol/    Shared schema (TestRequest dataclass)
   plugins/     Plugin protocols (Builder, Deployer, Tester, Profiler) and loader
   perf/        Profiling: perf record, stack analysis, arch profiles
-  campaign.py  Pointer load/save, campaign resolution
+  pointer.py   Pointer file (.autoforge.toml) load/save
+  campaign.py  Campaign config accessor functions and resolution
 projects/
   dpdk/
     builds/          Build plugins (e.g. local.py)

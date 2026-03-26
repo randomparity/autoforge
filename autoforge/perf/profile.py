@@ -18,7 +18,7 @@ PERF_TIMEOUT_MARGIN = 30  # extra seconds beyond duration for perf to finish
 
 
 @dataclass
-class ProfileResult:
+class PerfCaptureResult:
     """Result of a perf profiling capture."""
 
     success: bool
@@ -29,7 +29,6 @@ class ProfileResult:
 
 
 def _build_cmd(args: list[str], *, sudo: bool) -> list[str]:
-    """Prepend sudo to a command if requested."""
     if sudo:
         return ["sudo", *args]
     return args
@@ -44,7 +43,7 @@ def profile_pid(
     frequency: int = 99,
     sudo: bool = False,
     cpus: str | None = None,
-) -> ProfileResult:
+) -> PerfCaptureResult:
     """Capture perf record + perf stat against a running process.
 
     Args:
@@ -58,12 +57,12 @@ def profile_pid(
             uses -a -C instead of -p to capture all threads on those cores.
 
     Returns:
-        ProfileResult with folded stacks and counter data.
+        PerfCaptureResult with folded stacks and counter data.
     """
     start = time.monotonic()
 
     if not shutil.which("perf"):
-        return ProfileResult(
+        return PerfCaptureResult(
             success=False,
             error="perf binary not found in PATH",
             duration_seconds=time.monotonic() - start,
@@ -84,7 +83,7 @@ def profile_pid(
     else:
         target_args = ["-p", str(pid)]
 
-    # Launch perf record and perf stat in parallel
+    # Both must run concurrently to capture the same execution window
     record_cmd = _build_cmd(
         [
             "perf",
@@ -124,7 +123,7 @@ def profile_pid(
             stderr=subprocess.PIPE,
         )
     except OSError as exc:
-        return ProfileResult(
+        return PerfCaptureResult(
             success=False,
             error=f"Failed to start perf record: {exc}",
             duration_seconds=time.monotonic() - start,
@@ -138,7 +137,7 @@ def profile_pid(
     except OSError as exc:
         record_proc.kill()
         record_proc.wait(timeout=10)
-        return ProfileResult(
+        return PerfCaptureResult(
             success=False,
             error=f"Failed to start perf stat: {exc}",
             duration_seconds=time.monotonic() - start,
@@ -154,7 +153,7 @@ def profile_pid(
         stat_proc.kill()
         record_proc.wait(timeout=10)
         stat_proc.wait(timeout=10)
-        return ProfileResult(
+        return PerfCaptureResult(
             success=False,
             error="perf timed out",
             duration_seconds=time.monotonic() - start,
@@ -172,7 +171,7 @@ def profile_pid(
         logger.warning("perf.data not found at %s", perf_data)
 
     if record_proc.returncode != 0:
-        return ProfileResult(
+        return PerfCaptureResult(
             success=False,
             error=f"perf record failed: {record_stderr_text[:500]}",
             duration_seconds=time.monotonic() - start,
@@ -187,7 +186,6 @@ def profile_pid(
             stat_stderr_text[:300],
         )
 
-    # Post-process: perf script → folded stacks
     script_cmd = _build_cmd(
         ["perf", "script", "-i", str(perf_data)],
         sudo=sudo,
@@ -205,7 +203,7 @@ def profile_pid(
         script_result.stderr[:300],
     )
     if script_result.returncode != 0:
-        return ProfileResult(
+        return PerfCaptureResult(
             success=False,
             error=f"perf script failed: {script_result.stderr[:500]}",
             duration_seconds=time.monotonic() - start,
@@ -213,7 +211,14 @@ def profile_pid(
 
     stacks = fold_stacks(script_result.stdout)
     folded_path = output_dir / "stacks.folded"
-    write_folded(stacks, folded_path)
+    try:
+        write_folded(stacks, folded_path)
+    except OSError as exc:
+        return PerfCaptureResult(
+            success=False,
+            error=f"Failed to write folded stacks: {exc}",
+            duration_seconds=time.monotonic() - start,
+        )
 
     counters = parse_perf_stat(stat_stderr.decode(errors="replace"))
 
@@ -222,12 +227,20 @@ def profile_pid(
         len(stacks),
         len(counters),
     )
-    return ProfileResult(
+    return PerfCaptureResult(
         success=True,
         folded_stacks=stacks,
         counters=counters,
         duration_seconds=time.monotonic() - start,
     )
+
+
+def _flush_frames(frames: list[str], stacks: dict[str, int]) -> None:
+    """Flush accumulated frames into the folded-stacks dict and clear frames."""
+    if frames:
+        stack_key = ";".join(reversed(frames))
+        stacks[stack_key] = stacks.get(stack_key, 0) + 1
+        frames.clear()
 
 
 def fold_stacks(perf_script_output: str) -> dict[str, int]:
@@ -246,12 +259,7 @@ def fold_stacks(perf_script_output: str) -> dict[str, int]:
         stripped = line.strip()
 
         if not stripped:
-            # Blank line ends a record
-            if current_frames:
-                # Frames are bottom-up from perf script; reverse for caller→callee
-                stack_key = ";".join(reversed(current_frames))
-                stacks[stack_key] = stacks.get(stack_key, 0) + 1
-                current_frames = []
+            _flush_frames(current_frames, stacks)
             continue
 
         if stripped.startswith(("(", "#")):
@@ -266,15 +274,12 @@ def fold_stacks(perf_script_output: str) -> dict[str, int]:
             current_frames.append(symbol)
 
     # Handle last record if no trailing blank line
-    if current_frames:
-        stack_key = ";".join(reversed(current_frames))
-        stacks[stack_key] = stacks.get(stack_key, 0) + 1
+    _flush_frames(current_frames, stacks)
 
     return stacks
 
 
 def _is_hex(s: str) -> bool:
-    """Check if a string looks like a hex address."""
     try:
         int(s, 16)
     except ValueError:

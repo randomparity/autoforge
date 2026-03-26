@@ -4,6 +4,22 @@ from __future__ import annotations
 
 from collections import Counter
 from pathlib import Path
+from typing import Any, TypedDict
+
+
+class StackDiff(TypedDict):
+    """Return type of diff_stacks()."""
+
+    baseline_total_samples: int
+    current_total_samples: int
+    significant_changes: list[dict[str, Any]]
+    net_assessment: str
+
+
+class CounterDiff(TypedDict):
+    """Return type of diff_counters()."""
+
+    deltas: dict[str, dict[str, Any]]
 
 
 def load_folded(path: Path) -> dict[str, int]:
@@ -16,7 +32,12 @@ def load_folded(path: Path) -> dict[str, int]:
         Dict mapping stack strings to sample counts.
     """
     stacks: dict[str, int] = {}
-    for line in path.read_text().splitlines():
+    try:
+        text = path.read_text()
+    except OSError as exc:
+        msg = f"Cannot load folded stacks: {path}: {exc}"
+        raise FileNotFoundError(msg) from exc
+    for line in text.splitlines():
         line = line.strip()
         if not line:
             continue
@@ -36,7 +57,7 @@ def _leaf_pcts(stacks: dict[str, int]) -> dict[str, float]:
     total = 0
     for stack, count in stacks.items():
         frames = stack.split(";")
-        leaf = frames[-1] if frames else "[unknown]"
+        leaf = frames[-1]
         func_counts[leaf] += count
         total += count
 
@@ -49,7 +70,7 @@ def diff_stacks(
     baseline: dict[str, int],
     current: dict[str, int],
     threshold: float = 1.0,
-) -> dict:
+) -> StackDiff:
     """Compare two folded-stack profiles.
 
     Args:
@@ -70,12 +91,7 @@ def diff_stacks(
         curr_pct = curr_pcts.get(symbol, 0.0)
         delta = curr_pct - base_pct
         if abs(delta) >= threshold:
-            if delta > 0:
-                verdict = "regressed"
-            elif delta < 0:
-                verdict = "improved"
-            else:
-                verdict = "neutral"
+            verdict = "regressed" if delta > 0 else "improved" if delta < 0 else "neutral"
             changes.append(
                 {
                     "symbol": symbol,
@@ -108,7 +124,7 @@ def diff_stacks(
 def diff_counters(
     baseline: dict[str, float],
     current: dict[str, float],
-) -> dict:
+) -> CounterDiff:
     """Compare two counter sets.
 
     Args:

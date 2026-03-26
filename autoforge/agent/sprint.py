@@ -7,8 +7,9 @@ import logging
 import re
 import shutil
 from pathlib import Path
+from typing import Any
 
-from autoforge.campaign import REPO_ROOT, load_pointer, save_pointer
+from autoforge.pointer import REPO_ROOT, load_pointer, save_pointer
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +169,7 @@ def switch_sprint(name: str) -> None:
     save_pointer(project, name)
 
 
-def list_sprints() -> list[dict]:
+def list_sprints() -> list[dict[str, Any]]:
     """Return summary info for all sprints.
 
     Returns:
@@ -189,7 +190,7 @@ def list_sprints() -> list[dict]:
         if not d.is_dir() or not SPRINT_NAME_RE.match(d.name):
             continue
 
-        info: dict = {"name": d.name, "iterations": 0, "max_metric": None}
+        info: dict[str, Any] = {"name": d.name, "iterations": 0, "max_metric": None}
         tsv = d / "results.tsv"
         if tsv.exists():
             try:

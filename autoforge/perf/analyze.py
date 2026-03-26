@@ -4,11 +4,24 @@ from __future__ import annotations
 
 import logging
 from collections import Counter
+from typing import Any, TypedDict
+
+from autoforge.perf.arch import ArchProfile
+
+
+class ProfileSummary(TypedDict):
+    """Return type of summarize()."""
+
+    top_functions: list[dict[str, Any]]
+    derived_metrics: dict[str, float]
+    diagnostics: list[dict[str, Any]]
+    total_samples: int
+
 
 logger = logging.getLogger(__name__)
 
 
-def top_functions(stacks: dict[str, int], limit: int = 20) -> list[dict]:
+def top_functions(stacks: dict[str, int], limit: int = 20) -> list[dict[str, Any]]:
     """Return the hottest functions by sample count.
 
     Credits the leaf (last) frame of each stack trace.
@@ -25,7 +38,7 @@ def top_functions(stacks: dict[str, int], limit: int = 20) -> list[dict]:
     total = 0
     for stack, count in stacks.items():
         frames = stack.split(";")
-        leaf = frames[-1] if frames else "[unknown]"
+        leaf = frames[-1]
         func_counts[leaf] += count
         total += count
 
@@ -42,7 +55,7 @@ def hot_paths(
     stacks: dict[str, int],
     depth: int = 5,
     limit: int = 10,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Return the top N full stack paths by sample count.
 
     Args:
@@ -72,7 +85,7 @@ def hot_paths(
 
 def compute_derived_metrics(
     counters: dict[str, float],
-    arch_profile: dict,
+    arch_profile: ArchProfile,
 ) -> dict[str, float]:
     """Calculate derived metrics (IPC, miss rates) from raw counters.
 
@@ -86,7 +99,6 @@ def compute_derived_metrics(
     Returns:
         Dict of derived metric name to computed value.
     """
-    # Build a lookup from abstract name → counter value
     events = arch_profile.get("events", {})
     abstract_values: dict[str, float] = {}
     for abstract_name, pmu_event in events.items():
@@ -118,8 +130,8 @@ def compute_derived_metrics(
 def diagnose(
     counters: dict[str, float],
     stacks: dict[str, int],
-    arch_profile: dict,
-) -> list[dict]:
+    arch_profile: ArchProfile,
+) -> list[dict[str, Any]]:
     """Evaluate arch heuristics against profiling data.
 
     Args:
@@ -158,8 +170,6 @@ def _evaluate_condition(condition: str, derived: dict[str, float]) -> bool:
     for op in ("<", ">"):
         if op in condition:
             parts = condition.split(op, 1)
-            if len(parts) != 2:
-                return False
             metric_name = parts[0].strip()
             try:
                 threshold = float(parts[1].strip())
@@ -193,8 +203,8 @@ def _category_from_condition(condition: str) -> str:
 def summarize(
     counters: dict[str, float],
     stacks: dict[str, int],
-    arch_profile: dict,
-) -> dict:
+    arch_profile: ArchProfile,
+) -> ProfileSummary:
     """Produce a compact JSON-serializable summary for results_json.
 
     Args:

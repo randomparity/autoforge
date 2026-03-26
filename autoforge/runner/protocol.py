@@ -6,10 +6,12 @@ import logging
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from autoforge.protocol import (
     GIT_TIMEOUT,
     STATUS_CLAIMED,
+    STATUS_COMPLETED,
     STATUS_FAILED,
     StatusLiteral,
     TestRequest,
@@ -29,20 +31,24 @@ def _git_commit_push(path: Path, message: str, retries: int = 3) -> bool:
     Returns:
         True if the push succeeded, False if all retries failed.
     """
-    subprocess.run(
-        ["git", "add", str(path)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=GIT_TIMEOUT,
-    )
-    subprocess.run(
-        ["git", "commit", "-m", message],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=GIT_TIMEOUT,
-    )
+    try:
+        subprocess.run(
+            ["git", "add", str(path)],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=GIT_TIMEOUT,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", message],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=GIT_TIMEOUT,
+        )
+    except subprocess.CalledProcessError as exc:
+        logger.error("git add/commit failed for %s: %s", path, exc.stderr or exc)
+        return False
 
     for attempt in range(retries):
         result = subprocess.run(
@@ -131,18 +137,18 @@ def update_status(
     status: StatusLiteral,
     request_path: Path,
     *,
-    results_json: dict | None = None,
+    results_json: dict[str, Any] | None = None,
     results_summary: str | None = None,
     metric_value: float | None = None,
     completed_at: str | None = None,
     error: str | None = None,
     build_log_snippet: str | None = None,
-) -> bool:
+) -> None:
     """Update a request's status and result fields, then commit and push.
 
     Args:
         request: The test request to update.
-        status: The new status string.
+        status: Target status to transition to.
         request_path: Path to the request JSON file.
         results_json: Test results as a dict.
         results_summary: Human-readable results summary.
@@ -150,9 +156,6 @@ def update_status(
         completed_at: ISO timestamp of completion.
         error: Error description (for failed requests).
         build_log_snippet: Truncated build log (for failed builds).
-
-    Returns:
-        True if the push succeeded, False otherwise.
     """
     logger.info("Transitioning request %04d: %s -> %s", request.sequence, request.status, status)
     request.transition_to(status)
@@ -174,12 +177,39 @@ def update_status(
         f"runner: {status} request {request.sequence:04d}",
     )
     if not pushed:
-        logger.error(
-            "Failed to push status update to %s for request %04d", status, request.sequence
-        )
-    else:
-        logger.debug("Pushed status %s for request %04d", status, request.sequence)
-    return pushed
+        msg = f"Failed to push status update to {status} for request {request.sequence:04d}"
+        raise RuntimeError(msg)
+    logger.debug("Pushed status %s for request %04d", status, request.sequence)
+
+
+def complete_request(
+    request: TestRequest,
+    request_path: Path,
+    *,
+    results_json: dict[str, Any] | None = None,
+    results_summary: str | None = None,
+    metric_value: float | None = None,
+    completed_at: str | None = None,
+) -> None:
+    """Mark a request as completed with test results.
+
+    Args:
+        request: The test request to mark as completed.
+        request_path: Path to the request JSON file.
+        results_json: Test results as a dict.
+        results_summary: Human-readable results summary.
+        metric_value: Extracted metric value.
+        completed_at: ISO timestamp of completion (defaults to now).
+    """
+    update_status(
+        request,
+        STATUS_COMPLETED,
+        request_path,
+        results_json=results_json,
+        results_summary=results_summary,
+        metric_value=metric_value,
+        completed_at=completed_at or datetime.now(UTC).isoformat(),
+    )
 
 
 def fail(
@@ -187,20 +217,16 @@ def fail(
     request_path: Path,
     error: str,
     log_snippet: str | None = None,
-) -> bool:
+) -> None:
     """Mark a request as failed with an error message.
 
     Args:
-        request: The test request to fail.
+        request: The test request to mark as failed.
         request_path: Path to the request JSON file.
         error: Human-readable error description.
         log_snippet: Optional truncated build/test log.
-
-    Returns:
-        True if the failure status was successfully pushed, False if only
-        written locally.
     """
-    pushed = update_status(
+    update_status(
         request,
         STATUS_FAILED,
         request_path,
@@ -208,10 +234,3 @@ def fail(
         build_log_snippet=log_snippet,
         completed_at=datetime.now(UTC).isoformat(),
     )
-    if not pushed:
-        logger.critical(
-            "Could not push failure status for request %04d; local file written at %s",
-            request.sequence,
-            request_path,
-        )
-    return pushed

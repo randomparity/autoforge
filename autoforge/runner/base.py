@@ -6,10 +6,16 @@ import logging
 import subprocess
 import time
 from abc import ABC, abstractmethod
-from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
-from autoforge.campaign import CampaignConfig
+from autoforge.campaign import (
+    CampaignConfig,
+    project_name,
+)
+from autoforge.campaign import (
+    project_config as _project_config,
+)
 from autoforge.plugins.loader import load_component
 from autoforge.plugins.protocols import BuildResult, DeployResult
 from autoforge.protocol import (
@@ -17,7 +23,6 @@ from autoforge.protocol import (
     STATUS_BUILDING,
     STATUS_BUILT,
     STATUS_CLAIMED,
-    STATUS_COMPLETED,
     STATUS_DEPLOYED,
     STATUS_DEPLOYING,
     STATUS_PENDING,
@@ -27,6 +32,7 @@ from autoforge.protocol import (
 )
 from autoforge.runner.protocol import (
     claim,
+    complete_request,
     fail,
     find_by_status,
     update_status,
@@ -67,18 +73,24 @@ def recover_stale_requests(requests_dir: Path, stale_statuses: frozenset[str]) -
                 request.sequence,
                 request.status,
             )
-            fail(request, path, error="runner restarted")
+            try:
+                fail(request, path, error="runner restarted")
+            except RuntimeError:
+                logger.error(
+                    "Could not push failure status for request %04d; written locally",
+                    request.sequence,
+                )
 
 
 def _run_build(
     request: TestRequest,
     request_path: Path,
     campaign: CampaignConfig,
-    config: dict,
+    config: dict[str, Any],
 ) -> BuildResult | None:
     """Execute the build phase. Returns BuildResult on success, None on failure."""
-    project_config = campaign.get("project", {})
-    project_name = project_config.get("name", "dpdk")
+    proj_cfg = _project_config(campaign)
+    proj_name = project_name(campaign)
     paths = config.get("paths", {})
     timeouts = config.get("timeouts", {})
     source_path = Path(paths.get("dpdk_src", "/opt/dpdk"))
@@ -86,10 +98,10 @@ def _run_build(
     build_timeout = int(timeouts.get("build_minutes", 30)) * 60
 
     builder = load_component(
-        project_name,
+        proj_name,
         "build",
         request.build_plugin,
-        project_config=project_config,
+        project_config=proj_cfg,
         runner_config=config,
     )
 
@@ -108,18 +120,18 @@ def _run_deploy(
     request: TestRequest,
     request_path: Path,
     campaign: CampaignConfig,
-    config: dict,
+    config: dict[str, Any],
     build_result: BuildResult,
 ) -> DeployResult | None:
     """Execute the deploy phase. Returns DeployResult on success, None on failure."""
-    project_config = campaign.get("project", {})
-    project_name = project_config.get("name", "dpdk")
+    proj_cfg = _project_config(campaign)
+    proj_name = project_name(campaign)
 
     deployer = load_component(
-        project_name,
+        proj_name,
         "deploy",
         request.deploy_plugin,
-        project_config=project_config,
+        project_config=proj_cfg,
         runner_config=config,
     )
 
@@ -138,20 +150,20 @@ def _run_test(
     request: TestRequest,
     request_path: Path,
     campaign: CampaignConfig,
-    config: dict,
+    config: dict[str, Any],
     deploy_result: DeployResult,
 ) -> None:
     """Execute the test phase and update request to completed/failed."""
-    project_config = campaign.get("project", {})
-    project_name = project_config.get("name", "dpdk")
+    proj_cfg = _project_config(campaign)
+    proj_name = project_name(campaign)
     timeouts = config.get("timeouts", {})
     test_timeout = int(timeouts.get("test_minutes", 10)) * 60
 
     tester = load_component(
-        project_name,
+        proj_name,
         "test",
         request.test_plugin,
-        project_config=project_config,
+        project_config=proj_cfg,
         runner_config=config,
     )
 
@@ -162,14 +174,12 @@ def _run_test(
         fail(request, request_path, error=test_result.error or "Test failed")
         return
 
-    update_status(
+    complete_request(
         request,
-        STATUS_COMPLETED,
         request_path,
         results_json=test_result.results_json,
         results_summary=test_result.results_summary,
         metric_value=test_result.metric_value,
-        completed_at=datetime.now(UTC).isoformat(),
     )
 
 
@@ -181,8 +191,8 @@ class PhaseRunner(ABC):
 
     def __init__(
         self,
-        config: dict,
-        campaign: dict,
+        config: dict[str, Any],
+        campaign: CampaignConfig,
         requests_dir: Path,
     ) -> None:
         self.config = config
@@ -245,7 +255,13 @@ class PhaseRunner(ABC):
                         "Unhandled error in execute_phase for request %04d",
                         request.sequence,
                     )
-                    fail(request, request_path, error="runner: unhandled exception")
+                    try:
+                        fail(request, request_path, error="runner: unhandled exception")
+                    except RuntimeError:
+                        logger.error(
+                            "Could not push failure status for request %04d; written locally",
+                            request.sequence,
+                        )
 
         except KeyboardInterrupt:
             logger.info("Runner stopped by user")

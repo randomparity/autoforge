@@ -7,7 +7,7 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
-from autoforge.agent.metric import Direction
+from autoforge.protocol import Direction
 
 logger = logging.getLogger(__name__)
 
@@ -62,15 +62,8 @@ def append_result(
         raise OSError(msg) from exc
 
 
-def load_history(path: Path) -> list[dict]:
-    """Read the TSV history file into a list of dicts.
-
-    Args:
-        path: Path to the results.tsv file.
-
-    Returns:
-        List of row dicts keyed by column name.
-    """
+def load_history(path: Path) -> list[dict[str, str]]:
+    """Read the TSV history file into a list of row dicts keyed by column name."""
     if not path.exists():
         return []
 
@@ -86,7 +79,7 @@ def load_history(path: Path) -> list[dict]:
 def best_result(
     path: Path,
     direction: Direction = "maximize",
-) -> dict | None:
+) -> dict[str, str] | None:
     """Return the history row with the best metric value.
 
     Args:
@@ -119,6 +112,7 @@ def append_failure(
     metric: float | None,
     description: str,
     diff_summary: str,
+    *,
     path: Path,
 ) -> None:
     """Record a failed optimization attempt.
@@ -145,15 +139,8 @@ def append_failure(
         raise OSError(msg) from exc
 
 
-def load_failures(path: Path) -> list[dict]:
-    """Read the failures TSV file.
-
-    Args:
-        path: Path to the failures.tsv file.
-
-    Returns:
-        List of row dicts keyed by column name.
-    """
+def load_failures(path: Path) -> list[dict[str, str]]:
+    """Read the failures TSV file into a list of row dicts keyed by column name."""
     if not path.exists():
         return []
 
@@ -166,7 +153,7 @@ def load_failures(path: Path) -> list[dict]:
         return []
 
 
-def format_failures(failures: list[dict], limit: int = 10) -> str:
+def format_failures(failures: list[dict[str, str]], limit: int = 10) -> str:
     """Format recent failures for inclusion in prompts.
 
     Args:

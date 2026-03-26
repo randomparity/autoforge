@@ -9,12 +9,12 @@ import pytest
 
 from autoforge.agent.hints import (
     HINTS_DIR,
+    hints_file_ref,
     hints_path,
-    hints_summary,
     list_topics,
-    resolve_arch,
     workload_hints,
 )
+from autoforge.campaign import platform_arch
 
 
 class TestHintsPath:
@@ -53,13 +53,13 @@ class TestHintsPath:
 
 class TestHintsSummary:
     def test_format(self) -> None:
-        result = hints_summary("ppc64le")
+        result = hints_file_ref("ppc64le")
         assert "Architecture optimization hints for ppc64le:" in result
         assert "ppc64le.md" in result
         assert "lines" in result
 
     def test_perf_counters_format(self) -> None:
-        result = hints_summary("ppc64le", topic="perf-counters")
+        result = hints_file_ref("ppc64le", topic="perf-counters")
         assert "perf-counters" in result
         assert "ppc64le-perf-counters.md" in result
 
@@ -129,13 +129,13 @@ class TestWorkloadHints:
         assert result == ""
 
 
-class TestResolveArch:
+class TestPlatformArch:
     def test_present(self) -> None:
         campaign = {"platform": {"arch": "ppc64le"}}
-        assert resolve_arch(campaign) == "ppc64le"
+        assert platform_arch(campaign) == "ppc64le"
 
     def test_absent(self) -> None:
-        assert resolve_arch({}) is None
+        assert platform_arch({}) is None
 
     def test_no_platform_section(self) -> None:
-        assert resolve_arch({"goal": {}}) is None
+        assert platform_arch({"goal": {}}) is None

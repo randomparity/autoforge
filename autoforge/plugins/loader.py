@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from autoforge.campaign import CampaignConfig, project_config
 from autoforge.plugins.protocols import (
     Builder,
     Deployer,
@@ -49,11 +50,6 @@ class PipelineComponents:
     profiler: Profiler | None
 
 
-def _projects_root() -> Path:
-    """Return the projects root directory. Allows override for testing."""
-    return PROJECTS_ROOT
-
-
 def _find_plugin_file(project: str, category: str, name: str, root: Path | None = None) -> Path:
     """Locate the plugin file on disk.
 
@@ -74,7 +70,7 @@ def _find_plugin_file(project: str, category: str, name: str, root: Path | None 
         msg = f"Invalid category {category!r}, must be one of {sorted(CATEGORY_MAP)}"
         raise ValueError(msg)
 
-    projects = root or _projects_root()
+    projects = root or PROJECTS_ROOT
     category_dir = projects / project / CATEGORY_MAP[category]
     plugin_path = category_dir / f"{name}.py"
 
@@ -218,7 +214,7 @@ def list_components(
         msg = f"Invalid category {category!r}, must be one of {sorted(CATEGORY_MAP)}"
         raise ValueError(msg)
 
-    projects = root or _projects_root()
+    projects = root or PROJECTS_ROOT
     category_dir = projects / project / CATEGORY_MAP[category]
 
     if not category_dir.is_dir():
@@ -229,7 +225,7 @@ def list_components(
 
 def load_pipeline(
     project: str,
-    campaign: dict[str, Any],
+    campaign: CampaignConfig,
     root: Path | None = None,
 ) -> PipelineComponents:
     """Load all components specified in a campaign config.
@@ -245,7 +241,7 @@ def load_pipeline(
     Raises:
         ValueError: If required plugins are missing from config.
     """
-    project_cfg = campaign.get("project", {})
+    project_cfg = project_config(campaign)
 
     build_name = project_cfg.get("build")
     deploy_name = project_cfg.get("deploy")

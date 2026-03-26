@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 EXIT_PASS = 0
 EXIT_FAIL = 1
 EXIT_WARN = 2
@@ -9,13 +11,13 @@ EXIT_ERROR = 3
 
 
 def check_regression(
-    stack_diff: dict,
-    counter_diff: dict | None = None,
+    stack_diff: dict[str, Any],
+    counter_diff: dict[str, Any] | None = None,
     *,
     max_regression_pct: float = 5.0,
     max_ipc_drop: float = 0.05,
     throughput_delta: float | None = None,
-) -> tuple[int, dict]:
+) -> tuple[int, dict[str, Any]]:
     """Evaluate a profile diff against regression thresholds.
 
     Args:
@@ -28,7 +30,7 @@ def check_regression(
     Returns:
         Tuple of (exit_code, report_dict).
     """
-    report: dict = {"checks": [], "exit_code": EXIT_PASS}
+    report: dict[str, Any] = {"checks": [], "exit_code": EXIT_PASS}
     worst_exit = EXIT_PASS
 
     # Check per-symbol regressions
@@ -87,7 +89,7 @@ def check_regression(
     return worst_exit, report
 
 
-def _extract_ipc_delta(counter_diff: dict) -> float | None:
+def _extract_ipc_delta(counter_diff: dict[str, Any]) -> float | None:
     """Extract IPC change from counter diff, if both cycles and instructions present."""
     deltas = counter_diff.get("deltas", {})
 

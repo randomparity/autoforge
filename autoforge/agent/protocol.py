@@ -8,7 +8,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from autoforge.campaign import CampaignConfig
+from autoforge.campaign import CampaignConfig, metric_config, project_config
 from autoforge.protocol import GIT_TIMEOUT, TestRequest
 
 logger = logging.getLogger(__name__)
@@ -57,23 +57,23 @@ def create_request(
     """
     requests_dir.mkdir(parents=True, exist_ok=True)
 
-    metric = campaign.get("metric", {})
-    project = campaign.get("project", {})
+    mc = metric_config(campaign)
+    pc = project_config(campaign)
 
-    profiler = "" if skip_profiling else project.get("profiler", "")
+    profiler = "" if skip_profiling else pc.get("profiler", "")
 
     request = TestRequest(
         sequence=seq,
         created_at=datetime.now(UTC).isoformat(),
         source_commit=commit,
         description=description,
-        build_plugin=project.get("build", ""),
-        deploy_plugin=project.get("deploy", ""),
-        test_plugin=project.get("test", ""),
+        build_plugin=pc.get("build", ""),
+        deploy_plugin=pc.get("deploy", ""),
+        test_plugin=pc.get("test", ""),
         profile_plugin=profiler,
         tags=tags,
-        metric_name=metric.get("name", ""),
-        metric_path=metric.get("path", ""),
+        metric_name=mc.get("name", ""),
+        metric_path=mc.get("path", ""),
     )
 
     path = requests_dir / request.filename
@@ -100,7 +100,6 @@ def find_latest_request(requests_dir: Path) -> TestRequest | None:
             return TestRequest.read(path)
         except (ValueError, KeyError, TypeError) as exc:
             logger.warning("Skipping malformed request %s: %s", path.name, exc)
-            continue
 
     return None
 

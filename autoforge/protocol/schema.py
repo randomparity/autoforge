@@ -7,6 +7,11 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+GIT_TIMEOUT = 60
+"""Timeout in seconds for git subprocess calls (shared by agent and runner)."""
+
+Direction = Literal["maximize", "minimize"]
+
 StatusLiteral = Literal[
     "pending",
     "claimed",
@@ -160,7 +165,7 @@ def request_fields() -> list[str]:
     return [f.name for f in TestRequest.__dataclass_fields__.values()]
 
 
-def extract_metric(data: dict, path: str) -> float:
+def extract_metric(data: dict[str, Any], path: str) -> float:
     """Walk a dot-notation path into nested dicts/lists and return the value.
 
     Numeric path components are treated as list indices.

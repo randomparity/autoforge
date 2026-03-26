@@ -4,15 +4,21 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from autoforge.agent.history import load_failures, load_history
 from autoforge.agent.protocol import find_request_by_seq
 from autoforge.agent.sprint import failures_path, requests_dir, results_path
-from autoforge.campaign import REPO_ROOT
-
-if TYPE_CHECKING:
-    from autoforge.campaign import CampaignConfig
+from autoforge.campaign import (
+    CampaignConfig,
+    campaign_meta,
+    goal_config,
+    metric_direction,
+    metric_name,
+    platform_config,
+    project_name,
+)
+from autoforge.pointer import REPO_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -110,18 +116,17 @@ def _load_summary_data(campaign: CampaignConfig) -> dict[str, Any]:
     history = load_history(res_path)
     failures = load_failures(fail_path)
 
-    campaign_cfg = campaign.get("campaign", {})
-    metric_cfg = campaign.get("metric", {})
-    goal_cfg = campaign.get("goal", {})
-    platform_cfg = campaign.get("platform", {})
+    camp_meta = campaign_meta(campaign)
+    goal_cfg = goal_config(campaign)
+    plat_cfg = platform_config(campaign)
 
     try:
         sprint_name = active_sprint_name()
     except (KeyError, FileNotFoundError):
-        sprint_name = campaign_cfg.get("name", "unknown")
+        sprint_name = camp_meta.get("name", "unknown")
 
-    direction = metric_cfg.get("direction", "maximize")
-    metric_name = metric_cfg.get("name", "metric")
+    direction = metric_direction(campaign)
+    m_name = metric_name(campaign)
 
     # Extract scored rows
     scored = _scored_rows(history, direction)
@@ -140,7 +145,7 @@ def _load_summary_data(campaign: CampaignConfig) -> dict[str, Any]:
     if baseline and best:
         gain = best["value"] - baseline["value"]
         gain_pct = (gain / baseline["value"]) * 100 if baseline["value"] else 0
-        total_gain = f"{gain:+.2f} {metric_name}"
+        total_gain = f"{gain:+.2f} {m_name}"
         gain_pct_str = f"{gain_pct:+.1f}%"
     else:
         total_gain = "N/A"
@@ -160,8 +165,8 @@ def _load_summary_data(campaign: CampaignConfig) -> dict[str, Any]:
     return {
         "sprint_name": sprint_name,
         "goal_description": goal_cfg.get("description", "").strip(),
-        "platform": platform_cfg.get("arch", "unknown"),
-        "metric_name": metric_name,
+        "platform": plat_cfg.get("arch", "unknown"),
+        "metric_name": m_name,
         "metric_direction": direction,
         "baseline_metric": f"{baseline_metric} (request {baseline_seq})",
         "best_metric": best_metric,
@@ -169,7 +174,7 @@ def _load_summary_data(campaign: CampaignConfig) -> dict[str, Any]:
         "total_gain": total_gain,
         "gain_pct": gain_pct_str,
         "iterations_used": len(history),
-        "iterations_budget": campaign_cfg.get("max_iterations", "?"),
+        "iterations_budget": camp_meta.get("max_iterations", "?"),
         "accepted_patches_table": accepted_table,
         "rejected_experiments_table": rejected_table,
         "build_failures_table": failures_table,
@@ -181,7 +186,7 @@ def _load_summary_data(campaign: CampaignConfig) -> dict[str, Any]:
 
 
 def _scored_rows(
-    history: list[dict],
+    history: list[dict[str, str]],
     direction: str,
 ) -> list[dict[str, Any]]:
     """Extract rows with valid metrics, sorted by best first."""
@@ -206,7 +211,7 @@ def _scored_rows(
     return rows
 
 
-def _first_completed(history: list[dict]) -> dict[str, Any] | None:
+def _first_completed(history: list[dict[str, str]]) -> dict[str, Any] | None:
     """Find the first completed result (baseline)."""
     for row in history:
         if row.get("status") == "completed" and row.get("metric_value"):
@@ -221,8 +226,8 @@ def _first_completed(history: list[dict]) -> dict[str, Any] | None:
 
 
 def _build_accepted_table(
-    history: list[dict],
-    baseline: dict | None,
+    history: list[dict[str, str]],
+    baseline: dict[str, Any] | None,
     direction: str,
 ) -> str:
     """Build markdown table of accepted (improving) results."""
@@ -260,7 +265,7 @@ def _build_accepted_table(
     return "\n".join(lines)
 
 
-def _build_rejected_table(failures: list[dict]) -> str:
+def _build_rejected_table(failures: list[dict[str, str]]) -> str:
     """Build markdown table of rejected experiments."""
     if not failures:
         return "No rejected experiments."
@@ -277,7 +282,7 @@ def _build_rejected_table(failures: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _build_failures_table(history: list[dict], req_dir: Path) -> str:
+def _build_failures_table(history: list[dict[str, str]], req_dir: Path) -> str:
     """Build markdown table of build/test failures."""
     failed = [r for r in history if r.get("status") == "failed"]
     if not failed:
@@ -295,13 +300,13 @@ def _build_failures_table(history: list[dict], req_dir: Path) -> str:
             req = find_request_by_seq(int(seq), req_dir)
             if req and req.error:
                 error = req.error[:80]
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as exc:
+            logger.debug("Could not load request %s: %s", seq, exc)
         lines.append(f"| {seq} | {desc} | {error} |")
     return "\n".join(lines)
 
 
-def _build_tags_summary(history: list[dict]) -> str:
+def _build_tags_summary(history: list[dict[str, str]]) -> str:
     """Build a summary of experiment tags."""
     tag_counts: dict[str, int] = {}
     for row in history:
@@ -318,8 +323,8 @@ def _build_tags_summary(history: list[dict]) -> str:
 
 
 def _build_patch_prompts(
-    history: list[dict],
-    baseline: dict | None,
+    history: list[dict[str, str]],
+    baseline: dict[str, Any] | None,
     direction: str,
 ) -> str:
     """Generate placeholder prompts for each accepted patch."""
@@ -358,9 +363,9 @@ def _build_patch_prompts(
 
 def _load_template(campaign: CampaignConfig) -> str:
     """Load summary template, checking project directory first."""
-    project = campaign.get("project", {}).get("name", "")
-    if project:
-        project_template = REPO_ROOT / "projects" / project / "summary-template.md"
+    proj = project_name(campaign)
+    if proj:
+        project_template = REPO_ROOT / "projects" / proj / "summary-template.md"
         if project_template.exists():
             return project_template.read_text()
     return DEFAULT_TEMPLATE

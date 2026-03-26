@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from autoforge.campaign import CampaignConfig
+from typing import Any
 
 KNOWN_ARCHES: frozenset[str] = frozenset(
     {
@@ -52,7 +49,7 @@ def hints_path(arch: str, topic: str = DEFAULT_TOPIC) -> Path:
     return path
 
 
-def hints_summary(arch: str, topic: str = DEFAULT_TOPIC) -> str:
+def hints_file_ref(arch: str, topic: str = DEFAULT_TOPIC) -> str:
     """Return a short summary pointing the agent to the hints file.
 
     Args:
@@ -100,7 +97,7 @@ _CACHE_LINE_SIZES: dict[str, int] = {
 }
 
 
-def workload_hints(arch: str, profile_summary: dict) -> str:
+def workload_hints(arch: str, profile_summary: dict[str, Any]) -> str:
     """Generate workload-specific optimization suggestions from profiling data.
 
     Args:
@@ -172,15 +169,3 @@ def workload_hints(arch: str, profile_summary: dict) -> str:
     for i, s in enumerate(suggestions, 1):
         lines.append(f"  {i}. {s}")
     return "\n".join(lines)
-
-
-def resolve_arch(campaign: CampaignConfig) -> str | None:
-    """Extract arch from campaign config.
-
-    Args:
-        campaign: Parsed campaign TOML dict.
-
-    Returns:
-        Architecture string, or None if not configured.
-    """
-    return campaign.get("platform", {}).get("arch")

@@ -7,9 +7,12 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from autoforge.plugins.protocols import BuildResult
+
+if TYPE_CHECKING:
+    from autoforge.campaign import ProjectConfig
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +25,7 @@ def _truncate_log(log: str, max_lines: int = 200) -> str:
     return "\n".join(lines[-max_lines:])
 
 
-class LocalServerBuilder:
+class LocalBuilder:
     """Builds DPDK from source using meson + ninja."""
 
     name = "local"
@@ -30,7 +33,7 @@ class LocalServerBuilder:
     def __init__(self) -> None:
         self._build_config: dict[str, Any] = {}
 
-    def configure(self, project_config: dict[str, Any], runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
         self._build_config = runner_config.get("build", {})
 
     def build(self, source_path: Path, commit: str, build_dir: Path, timeout: int) -> BuildResult:

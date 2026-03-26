@@ -2,21 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
-
-if TYPE_CHECKING:
-    from autoforge.campaign import CampaignConfig
-
-Direction = Literal["maximize", "minimize"]
+from autoforge.campaign import CampaignConfig, metric_threshold
+from autoforge.protocol import Direction
 
 
 def compare_metric(current: float, best: float, direction: Direction) -> bool:
     """Return True if current is strictly better than best.
-
-    Args:
-        current: The metric value from the latest iteration.
-        best: The best metric value seen so far.
-        direction: Either 'maximize' or 'minimize'.
 
     Raises:
         ValueError: If direction is not 'maximize' or 'minimize'.
@@ -35,7 +26,7 @@ def below_threshold(
     campaign: CampaignConfig,
 ) -> bool:
     """Check if improvement between metric and best_val is below threshold."""
-    threshold = campaign.get("metric", {}).get("threshold")
-    if threshold is None or metric is None or best_val is None:
+    threshold = metric_threshold(campaign)
+    if not threshold or metric is None or best_val is None:
         return False
     return abs(metric - best_val) < threshold
