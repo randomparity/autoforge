@@ -13,3 +13,4 @@ sequence	timestamp	source_commit	metric_value	status	description
 23	2026-03-26T04:15:47.238192+00:00	e1b9e72ffac469f0e2f4eec9418c235e71b083ae	172.6587	completed	memif: mark rx/tx functions as hot for better code placement
 24	2026-03-26T04:18:36.887642+00:00	947249d881645c74719699203e084d1b459e0159	172.4471	completed	memif: flatten rx/tx functions for aggressive inlining
 25	2026-03-26T04:21:57.501449+00:00	195656d556da16c7dc91e36c06d671e9d755baa5	168.9995	completed	memif rx: use dcbz to avoid read-for-ownership on POWER9 mbuf data
+26	2026-03-26T04:25:20.306181+00:00	33853c80ef4f8fa7e59b8c50f56cad5d0f7245a8	172.182	completed	ppc64le memcpy: mark small-copy fallback paths as unlikely

@@ -11,3 +11,5 @@ timestamp	source_commit	metric_value	description	diff_summary
  1 file changed, 2 insertions(+), 2 deletions(-)"
 2026-03-26T04:21:58.520484+00:00	195656d556da16c7dc91e36c06d671e9d755baa5	168.9995	memif rx: use dcbz to avoid read-for-ownership on POWER9 mbuf data	"drivers/net/memif/rte_eth_memif.c | 10 ++++++++++
  1 file changed, 10 insertions(+)"
+2026-03-26T04:25:21.698490+00:00	33853c80ef4f8fa7e59b8c50f56cad5d0f7245a8	172.182	ppc64le memcpy: mark small-copy fallback paths as unlikely	"lib/eal/ppc/include/rte_memcpy.h | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)"
