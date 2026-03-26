@@ -27,3 +27,5 @@ timestamp	source_commit	metric_value	description	diff_summary
  1 file changed, 13 insertions(+), 3 deletions(-)"
 2026-03-26T13:09:53.006249+00:00	58cda4e40f5c5100b6b7dddd67f064dd77aa0f23	181.1104	memif rx: 8-at-a-time fast path to halve loop iterations	"drivers/net/memif/rte_eth_memif.c | 126 +++++++++++++++++++++++++++++---------
  1 file changed, 98 insertions(+), 28 deletions(-)"
+2026-03-26T13:29:00.508740+00:00	ad24e47b32ec3a30bd8c02d973e650b92edef45a	184.2683	memif: reduce MAX_PKT_BURST to 64 to fit working set in L1D cache	"drivers/net/memif/rte_eth_memif.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
