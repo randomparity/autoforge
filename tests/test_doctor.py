@@ -282,6 +282,46 @@ class TestCheckPlugins:
         assert deploy_config.status == "pass"
         assert "pass-through" in deploy_config.message
 
+    def test_unexpected_section_warns(self, tmp_path: Path) -> None:
+        project, _ = _build_config_tree(tmp_path, runner=False)
+        tests_dir = tmp_path / "projects" / project / "tests"
+        # Write an example with only [testpmd]
+        _write_toml(tests_dir / "testpmd-memif.toml.example", "[testpmd]\n")
+        # Actual config has [testpmd] + stray [profiling]
+        _write_toml(
+            tests_dir / "testpmd-memif.toml",
+            '[testpmd]\nlcores = "4-7"\n[profiling]\nenabled = false\n',
+        )
+        campaign_data = {
+            "project": {
+                "build": "local",
+                "deploy": "local",
+                "test": "testpmd-memif",
+            },
+        }
+        results = check_plugins(project, campaign_data, tmp_path)
+        section_warns = [
+            r for r in results if r.name == "plugin.test.config_sections" and r.status == "warn"
+        ]
+        assert len(section_warns) == 1
+        assert "profiling" in section_warns[0].message
+
+    def test_no_warning_when_sections_match_example(self, tmp_path: Path) -> None:
+        project, _ = _build_config_tree(tmp_path, runner=False)
+        tests_dir = tmp_path / "projects" / project / "tests"
+        _write_toml(tests_dir / "testpmd-memif.toml.example", "[testpmd]\n")
+        _write_toml(tests_dir / "testpmd-memif.toml", '[testpmd]\nlcores = "4-7"\n')
+        campaign_data = {
+            "project": {
+                "build": "local",
+                "deploy": "local",
+                "test": "testpmd-memif",
+            },
+        }
+        results = check_plugins(project, campaign_data, tmp_path)
+        section_warns = [r for r in results if "config_sections" in r.name]
+        assert section_warns == []
+
 
 class TestCheckSprint:
     def test_missing_requests_dir(self, tmp_path: Path) -> None:

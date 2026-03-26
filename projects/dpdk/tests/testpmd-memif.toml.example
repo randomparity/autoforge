@@ -57,13 +57,3 @@ repeat_count = 1
 
 # Run testpmd with sudo (requires passwordless sudo for the testpmd binary)
 sudo = true
-
-[profiling]
-# Capture perf profiles during testpmd measurement window
-enabled = false
-
-# Sampling frequency in Hz (99 avoids aliasing with timer interrupts)
-frequency = 99
-
-# Run perf commands with sudo (must match testpmd sudo setting)
-sudo = true

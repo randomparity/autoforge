@@ -574,6 +574,47 @@ def check_runner(
     return results
 
 
+def _check_config_sections(
+    data: dict[str, Any],
+    toml_path: Path,
+    category: str,
+    rel_toml: str,
+    root: Path,
+) -> list[CheckResult]:
+    """Warn about unexpected top-level sections in a plugin config.
+
+    Compares the actual config's top-level keys against the sibling
+    .toml.example file. Keys present in the config but absent from
+    the example are flagged as warnings.
+    """
+    results: list[CheckResult] = []
+    example_path = toml_path.with_suffix(".toml.example")
+    if not example_path.is_file():
+        return results
+
+    example_data, err = _load_toml(example_path)
+    if example_data is None:
+        return results
+
+    expected_sections = set(example_data.keys())
+    actual_sections = set(data.keys())
+    unexpected = actual_sections - expected_sections
+
+    for section in sorted(unexpected):
+        results.append(
+            CheckResult(
+                f"plugin.{category}.config_sections",
+                "warn",
+                f"{rel_toml}: unexpected section [{section}] "
+                f"(expected: {sorted(expected_sections)})",
+                "plugin",
+                path=rel_toml,
+            )
+        )
+
+    return results
+
+
 def check_plugins(
     project: str,
     campaign_data: dict[str, Any],
@@ -637,6 +678,7 @@ def check_plugins(
                         path=rel_toml,
                     )
                 )
+                results.extend(_check_config_sections(data, toml_path, category, rel_toml, root))
             else:
                 results.append(
                     CheckResult(
