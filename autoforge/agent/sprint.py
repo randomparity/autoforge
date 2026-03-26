@@ -160,8 +160,11 @@ def init_sprint(
     branch = sprint_branch_name(name)
     campaign_path = sdir / "campaign.toml"
     text = campaign_path.read_text()
+    # NOTE: Regex is section-unaware; assumes optimization_branch appears exactly
+    # once per file, which holds for all current templates. Output is always
+    # double-quoted (normalizing any single-quoted source value).
     new_text, count = re.subn(
-        r'^(optimization_branch\s*=\s*)"[^"]*"',
+        r'^(optimization_branch\s*=\s*)(?:"[^"]*"|\'[^\']*\')',
         rf'\1"{branch}"',
         text,
         flags=re.MULTILINE,

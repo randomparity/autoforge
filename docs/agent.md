@@ -21,7 +21,7 @@ submits them for testing, and iterates based on results.
 ## Installation
 
 ```bash
-git clone --recurse-submodules <repo-url>
+git clone --recurse-submodules <repo-url> autoforge
 cd autoforge
 make setup-agent
 ```
@@ -51,7 +51,7 @@ Campaign settings are per-sprint at
 | `[project]` | `test` | Test plugin name (e.g. `"testpmd-memif"`) |
 | `[project]` | `profiler` | Profiler plugin name (e.g. `"perf-record"`) |
 | `[project]` | `submodule_path` | Path to the DPDK submodule |
-| `[project]` | `optimization_branch` | Branch for good changes (empty = skip branch push; `campaign.toml.example` sets `"autoforge/optimize"`) |
+| `[project]` | `optimization_branch` | Branch for good changes (empty = skip branch push; set automatically by `sprint init` to `autoforge/{sprint-name}`) |
 | `[project]` | `scope` | Source paths the agent may modify (relative to submodule) |
 | `[profiling]` | `enabled` | Include profiling summary in results (default: `false`) |
 | `[platform]` | `arch` | Target architecture for `autoforge hints` (e.g. `"ppc64le"`, `"x86_64"`). Required unless `--arch` is passed. |
@@ -139,14 +139,12 @@ Request JSON files in `sprints/<name>/requests/` follow the naming pattern
 ## Optimization branch
 
 The agent commits all proposed changes to the branch named in
-`[project].optimization_branch` (default: `autoforge/optimize`). Create this
-branch in the submodule before your first submit:
+`[project].optimization_branch`, stamped automatically by `autoforge sprint init`
+as `autoforge/{sprint-name}` (e.g. `autoforge/2026-04-01-my-sprint`). The branch
+is created in the submodule on the first `submit` or `autoforge-loop` run.
 
-```bash
-git -C projects/dpdk/repo checkout -b autoforge/optimize
-```
-
-This is typically handled by the sprint's `program.md`.
+Run `autoforge doctor --role agent` to verify the branch is configured and exists
+in the submodule.
 
 After each measurement:
 

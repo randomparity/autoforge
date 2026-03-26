@@ -16,7 +16,7 @@ results back via git.
 ## Installation
 
 ```bash
-git clone --recurse-submodules <repo-url>
+git clone --recurse-submodules <repo-url> autoforge
 cd autoforge
 make setup-runner
 ```

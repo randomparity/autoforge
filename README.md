@@ -28,7 +28,7 @@ Agent                              Runner
 Prerequisites: Python 3.13+, [uv](https://docs.astral.sh/uv/), git.
 
 ```bash
-git clone --recurse-submodules <repo-url>
+git clone --recurse-submodules <repo-url> autoforge
 cd autoforge
 uv sync
 uv run autoforge context             # show current optimization state

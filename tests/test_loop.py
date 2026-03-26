@@ -127,6 +127,22 @@ class TestRunBaseline:
 
 
 class TestLoopMissingBranch:
+    def test_empty_branch_raises_system_exit(self) -> None:
+        campaign_empty_branch = {
+            **SAMPLE_CAMPAIGN,
+            "project": {**SAMPLE_CAMPAIGN["project"], "optimization_branch": ""},
+        }
+        with (
+            patch("autoforge.agent.loop.load_campaign", return_value=campaign_empty_branch),
+            patch("autoforge.agent.loop.resolve_campaign_path"),
+            patch("autoforge.agent.loop.setup_logging"),
+            patch("sys.argv", ["loop"]),
+            pytest.raises(SystemExit, match="optimization_branch"),
+        ):
+            from autoforge.agent.loop import main as loop_main
+
+            loop_main()
+
     def test_missing_branch_raises_system_exit(self) -> None:
         campaign_no_branch = {
             **SAMPLE_CAMPAIGN,
