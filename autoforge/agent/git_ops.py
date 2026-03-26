@@ -251,6 +251,28 @@ def _revert_and_record_failure(
     git_add_commit_push(files, f"revert: iteration {ctx.seq:04d}", dry_run=dry_run)
 
 
+def record_verdict(
+    keep: bool,
+    metric: float | None,
+    best_val: float | None,
+    ctx: ResultContext,
+    dry_run: bool = False,
+) -> None:
+    """Apply a pre-computed judge verdict and execute the corresponding git actions.
+
+    Args:
+        keep: True to keep the result (commit), False to revert.
+        metric: Metric value from the completed request.
+        best_val: Previous best metric value, or None if no baseline.
+        ctx: Result context with paths and metadata.
+        dry_run: If True, skip git operations.
+    """
+    if keep:
+        _record_improvement(metric, best_val, ctx, dry_run)
+    else:
+        _revert_and_record_failure(metric, best_val, ctx, dry_run)
+
+
 def record_result_or_revert(
     metric: float | None,
     best_val: float | None,

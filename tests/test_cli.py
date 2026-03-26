@@ -242,3 +242,103 @@ class TestCmdHints:
         out = capsys.readouterr().out
         assert "perf-counters" in out
         assert "ppc64le-perf-counters.md" in out
+
+
+class TestCmdJudge:
+    """Tests for cmd_judge with and without judge plugins."""
+
+    def _base_campaign(self, judge: str | None = None) -> dict:
+        project: dict = {
+            "name": "dpdk",
+            "build": "local",
+            "deploy": "local",
+            "test": "testpmd-memif",
+            "submodule_path": "projects/dpdk/repo",
+            "optimization_branch": "autoforge/optimize",
+        }
+        if judge:
+            project["judge"] = judge
+        return {
+            "campaign": {"name": "test", "max_iterations": 50},
+            "metric": {
+                "name": "throughput_mpps",
+                "path": "throughput_mpps",
+                "direction": "maximize",
+            },
+            "agent": {"poll_interval": 5, "timeout_minutes": 1},
+            "project": project,
+        }
+
+    def _make_request(self, metric: float | None = 90.0, status: str = "completed"):
+        from autoforge.protocol import TestRequest
+
+        req = TestRequest(
+            sequence=5,
+            created_at="2026-03-26T00:00:00",
+            source_commit="abc123",
+            description="test change",
+            build_plugin="local",
+            deploy_plugin="local",
+            test_plugin="testpmd-memif",
+            profile_plugin="",
+            metric_name="throughput_mpps",
+            metric_path="throughput_mpps",
+        )
+        req.status = status
+        req.metric_value = metric
+        return req
+
+    def test_no_judge_plugin_uses_default(self, tmp_path: Path) -> None:
+        from autoforge.agent.cli import cmd_judge
+
+        campaign = self._base_campaign()
+        latest = self._make_request()
+
+        with (
+            patch("autoforge.agent.cli.check_git_clean"),
+            patch("autoforge.agent.cli.requests_dir", return_value=tmp_path / "requests"),
+            patch("autoforge.agent.cli.results_path", return_value=tmp_path / "results.tsv"),
+            patch("autoforge.agent.cli.failures_path", return_value=tmp_path / "failures.tsv"),
+            patch("autoforge.agent.cli.find_latest_request", return_value=latest),
+            patch("autoforge.agent.cli.best_result", return_value=None),
+            patch("autoforge.agent.cli.append_result"),
+            patch("autoforge.agent.cli.apply_judge_verdict") as mock_apply,
+        ):
+            cmd_judge(campaign, dry_run=True)
+
+        mock_apply.assert_called_once()
+
+    def test_with_judge_plugin_uses_plugin(self, tmp_path: Path, capsys) -> None:
+        from autoforge.agent.cli import cmd_judge
+        from autoforge.plugins.protocols import JudgeVerdict
+
+        campaign = self._base_campaign(judge="always-keep")
+        latest = self._make_request()
+
+        mock_judge = type(
+            "FakeJudge",
+            (),
+            {
+                "name": "always-keep",
+                "configure": lambda self, *a: None,
+                "judge": lambda self, *a, **kw: JudgeVerdict(keep=True, reason="test keep"),
+            },
+        )()
+
+        with (
+            patch("autoforge.agent.cli.check_git_clean"),
+            patch("autoforge.agent.cli.requests_dir", return_value=tmp_path / "requests"),
+            patch("autoforge.agent.cli.results_path", return_value=tmp_path / "results.tsv"),
+            patch("autoforge.agent.cli.failures_path", return_value=tmp_path / "failures.tsv"),
+            patch("autoforge.agent.cli.find_latest_request", return_value=latest),
+            patch("autoforge.agent.cli.best_result", return_value=None),
+            patch("autoforge.agent.cli.append_result"),
+            patch("autoforge.agent.judge.load_judge", return_value=mock_judge),
+            patch("autoforge.agent.judge.record_verdict"),
+        ):
+            cmd_judge(campaign, dry_run=True)
+
+        out = capsys.readouterr().out
+        assert "always-keep" in out
+        assert "keep" in out
+        assert "test keep" in out

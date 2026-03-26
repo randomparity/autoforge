@@ -35,6 +35,7 @@ class ProjectConfig(TypedDict, total=False):
     deploy: str
     test: str
     profiler: str
+    judge: str
     submodule_path: str
     optimization_branch: str
     scope: list[str]
@@ -160,6 +161,11 @@ def goal_description(cfg: CampaignConfig) -> str:
 def goal_config(cfg: CampaignConfig) -> GoalConfig:
     """Return the goal config section."""
     return cfg.get("goal", {})
+
+
+def judge_plugin(cfg: CampaignConfig) -> str | None:
+    """Return the judge plugin name from campaign config, or None if not set."""
+    return cfg.get("project", {}).get("judge") or None
 
 
 def platform_arch(cfg: CampaignConfig) -> str | None:

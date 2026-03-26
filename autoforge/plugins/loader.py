@@ -15,6 +15,7 @@ from autoforge.campaign import CampaignConfig, project_config
 from autoforge.plugins.protocols import (
     Builder,
     Deployer,
+    Judge,
     Profiler,
     Tester,
 )
@@ -28,6 +29,7 @@ CATEGORY_MAP: dict[str, str] = {
     "deploy": "deploys",
     "test": "tests",
     "profiler": "perfs",
+    "judge": "judges",
 }
 
 CATEGORY_PROTOCOLS: dict[str, type] = {
@@ -35,9 +37,10 @@ CATEGORY_PROTOCOLS: dict[str, type] = {
     "deploy": Deployer,
     "test": Tester,
     "profiler": Profiler,
+    "judge": Judge,
 }
 
-ComponentType = Builder | Deployer | Tester | Profiler
+ComponentType = Builder | Deployer | Tester | Profiler | Judge
 
 
 @dataclass
@@ -55,7 +58,7 @@ def _find_plugin_file(project: str, category: str, name: str, root: Path | None 
 
     Args:
         project: Project name (directory under projects/).
-        category: One of 'build', 'deploy', 'test', 'profiler'.
+        category: One of 'build', 'deploy', 'test', 'profiler', 'judge'.
         name: Plugin name (filename stem, e.g. 'local').
         root: Override projects root (for testing).
 
@@ -159,7 +162,7 @@ def load_component(
 
     Args:
         project: Project name (directory under projects/).
-        category: One of 'build', 'deploy', 'test', 'profiler'.
+        category: One of 'build', 'deploy', 'test', 'profiler', 'judge'.
         name: Plugin name (filename stem).
         root: Override projects root (for testing).
         project_config: Campaign project config (passed to configure).
@@ -204,7 +207,7 @@ def list_components(
 
     Args:
         project: Project name.
-        category: One of 'build', 'deploy', 'test', 'profiler'.
+        category: One of 'build', 'deploy', 'test', 'profiler', 'judge'.
         root: Override projects root (for testing).
 
     Returns:
@@ -221,6 +224,36 @@ def list_components(
         return []
 
     return sorted(p.stem for p in category_dir.glob("*.py") if p.is_file())
+
+
+def load_judge(
+    project: str,
+    name: str,
+    root: Path | None = None,
+    *,
+    project_config: dict[str, Any] | None = None,
+    runner_config: dict[str, Any] | None = None,
+) -> Judge:
+    """Load a judge plugin by project and name.
+
+    Args:
+        project: Project name (directory under projects/).
+        name: Plugin name (filename stem).
+        root: Override projects root (for testing).
+        project_config: Campaign project config (passed to configure).
+        runner_config: Framework runner config (merged with sibling .toml).
+
+    Returns:
+        An instantiated (and optionally configured) Judge plugin.
+    """
+    return load_component(  # type: ignore[return-value]
+        project,
+        "judge",
+        name,
+        root=root,
+        project_config=project_config,
+        runner_config=runner_config,
+    )
 
 
 def load_pipeline(

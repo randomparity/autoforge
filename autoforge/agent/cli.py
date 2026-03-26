@@ -14,7 +14,6 @@ from autoforge.agent.git_ops import (
     git_add_commit_push,
     git_submodule_head,
     push_submodule,
-    record_result_or_revert,
 )
 from autoforge.agent.hints import hints_file_ref, list_topics
 from autoforge.agent.history import (
@@ -24,6 +23,7 @@ from autoforge.agent.history import (
     load_failures,
     load_history,
 )
+from autoforge.agent.judge import apply_judge_verdict
 from autoforge.agent.project import init_project
 from autoforge.agent.protocol import (
     create_request,
@@ -212,7 +212,8 @@ def cmd_judge(campaign: CampaignConfig, dry_run: bool) -> None:
         failures_path=fail,
         optimization_branch=optimization_branch(campaign),
     )
-    record_result_or_revert(metric, best_val, direction, ctx, dry_run=dry_run)
+
+    apply_judge_verdict(metric, best_val, direction, campaign, latest, ctx, dry_run=dry_run)
 
 
 def _poll_and_record(
@@ -436,7 +437,7 @@ def cmd_project_init(name: str) -> None:
         print(f"ERROR: {exc}")
         sys.exit(1)
     print(f"Project initialized: {pdir}")
-    print("  builds/  deploys/  tests/  perfs/  sprints/")
+    print("  builds/  deploys/  tests/  perfs/  judges/  sprints/")
 
 
 def cmd_sprint_list(campaign: CampaignConfig) -> None:

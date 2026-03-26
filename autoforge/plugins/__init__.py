@@ -6,6 +6,7 @@ from autoforge.plugins.loader import (
     PipelineComponents,
     list_components,
     load_component,
+    load_judge,
     load_pipeline,
 )
 from autoforge.plugins.protocols import (
@@ -13,6 +14,8 @@ from autoforge.plugins.protocols import (
     BuildResult,
     Deployer,
     DeployResult,
+    Judge,
+    JudgeVerdict,
     Profiler,
     ProfileResult,
     Tester,
@@ -24,6 +27,8 @@ __all__ = [
     "Builder",
     "DeployResult",
     "Deployer",
+    "Judge",
+    "JudgeVerdict",
     "PipelineComponents",
     "ProfileResult",
     "Profiler",
@@ -31,5 +36,6 @@ __all__ = [
     "Tester",
     "list_components",
     "load_component",
+    "load_judge",
     "load_pipeline",
 ]
