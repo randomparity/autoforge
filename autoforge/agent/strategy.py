@@ -157,7 +157,7 @@ def extract_profile_summary(result: TestRequest) -> dict[str, Any] | None:
     return raw.get("profiling")
 
 
-def validate_change(source_path: Path) -> bool:
+def has_submodule_change(source_path: Path) -> bool:
     """Check whether the source submodule pointer differs from the outer repo.
 
     Args:
@@ -166,6 +166,9 @@ def validate_change(source_path: Path) -> bool:
     Returns:
         True if the outer repo's submodule pointer has changed (i.e. the
         submodule has a different commit than what is currently tracked).
+
+    Raises:
+        subprocess.CalledProcessError: If the git diff command fails.
     """
     outer_diff = subprocess.run(
         ["git", "diff", "--submodule=short", "--", str(source_path)],

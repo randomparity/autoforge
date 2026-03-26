@@ -52,7 +52,7 @@ def hints_path(arch: str, topic: str = DEFAULT_TOPIC) -> Path:
     return path
 
 
-def hints_summary(arch: str, topic: str = DEFAULT_TOPIC) -> str:
+def hints_file_ref(arch: str, topic: str = DEFAULT_TOPIC) -> str:
     """Return a short summary pointing the agent to the hints file.
 
     Args:

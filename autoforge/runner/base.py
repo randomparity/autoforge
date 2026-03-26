@@ -41,11 +41,6 @@ from autoforge.runner.protocol import (
 logger = logging.getLogger(__name__)
 
 
-def _get_project_name(campaign: CampaignConfig) -> str:
-    """Extract the project name from a campaign config."""
-    return project_name(campaign)
-
-
 def git_pull() -> bool:
     """Pull latest changes with rebase. Returns True on success."""
     result = subprocess.run(
@@ -89,7 +84,7 @@ def _run_build(
 ) -> BuildResult | None:
     """Execute the build phase. Returns BuildResult on success, None on failure."""
     proj_cfg = _project_config(campaign)
-    project_name = _get_project_name(campaign)
+    proj_name = project_name(campaign)
     paths = config.get("paths", {})
     timeouts = config.get("timeouts", {})
     source_path = Path(paths.get("dpdk_src", "/opt/dpdk"))
@@ -97,7 +92,7 @@ def _run_build(
     build_timeout = int(timeouts.get("build_minutes", 30)) * 60
 
     builder = load_component(
-        project_name,
+        proj_name,
         "build",
         request.build_plugin,
         project_config=proj_cfg,
@@ -124,10 +119,10 @@ def _run_deploy(
 ) -> DeployResult | None:
     """Execute the deploy phase. Returns DeployResult on success, None on failure."""
     proj_cfg = _project_config(campaign)
-    project_name = _get_project_name(campaign)
+    proj_name = project_name(campaign)
 
     deployer = load_component(
-        project_name,
+        proj_name,
         "deploy",
         request.deploy_plugin,
         project_config=proj_cfg,
@@ -154,12 +149,12 @@ def _run_test(
 ) -> None:
     """Execute the test phase and update request to completed/failed."""
     proj_cfg = _project_config(campaign)
-    project_name = _get_project_name(campaign)
+    proj_name = project_name(campaign)
     timeouts = config.get("timeouts", {})
     test_timeout = int(timeouts.get("test_minutes", 10)) * 60
 
     tester = load_component(
-        project_name,
+        proj_name,
         "test",
         request.test_plugin,
         project_config=proj_cfg,

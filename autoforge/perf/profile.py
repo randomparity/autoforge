@@ -235,6 +235,14 @@ def profile_pid(
     )
 
 
+def _flush_frames(frames: list[str], stacks: dict[str, int]) -> None:
+    """Flush accumulated frames into the folded-stacks dict and clear frames."""
+    if frames:
+        stack_key = ";".join(reversed(frames))
+        stacks[stack_key] = stacks.get(stack_key, 0) + 1
+        frames.clear()
+
+
 def fold_stacks(perf_script_output: str) -> dict[str, int]:
     """Parse perf script output into folded stacks.
 
@@ -251,12 +259,7 @@ def fold_stacks(perf_script_output: str) -> dict[str, int]:
         stripped = line.strip()
 
         if not stripped:
-            # Blank line ends a record
-            if current_frames:
-                # Frames are bottom-up from perf script; reverse for caller→callee
-                stack_key = ";".join(reversed(current_frames))
-                stacks[stack_key] = stacks.get(stack_key, 0) + 1
-                current_frames = []
+            _flush_frames(current_frames, stacks)
             continue
 
         if stripped.startswith(("(", "#")):
@@ -271,9 +274,7 @@ def fold_stacks(perf_script_output: str) -> dict[str, int]:
             current_frames.append(symbol)
 
     # Handle last record if no trailing blank line
-    if current_frames:
-        stack_key = ";".join(reversed(current_frames))
-        stacks[stack_key] = stacks.get(stack_key, 0) + 1
+    _flush_frames(current_frames, stacks)
 
     return stacks
 

@@ -20,7 +20,7 @@ from autoforge.agent.strategy import (
     extract_profile_summary,
     format_context,
     format_profile_lines,
-    validate_change,
+    has_submodule_change,
 )
 from autoforge.campaign import (
     CampaignConfig,
@@ -69,7 +69,7 @@ def run_interactive_iteration(
     if user_input.lower() in ("quit", "exit", "q"):
         return False
 
-    if not validate_change(source_path):
+    if not has_submodule_change(source_path):
         print("No submodule change detected. Skipping iteration.")
         return True
 

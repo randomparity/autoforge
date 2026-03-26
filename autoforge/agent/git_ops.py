@@ -226,10 +226,10 @@ def _record_improvement(
     dry_run: bool,
 ) -> None:
     """Log and commit an improved result."""
-    logger.info(
-        "Improvement! %s -> %s" if best_val is not None else "Baseline: %s",
-        *((best_val, metric) if best_val is not None else (metric,)),
-    )
+    if best_val is not None:
+        logger.info("Improvement! %s -> %s", best_val, metric)
+    else:
+        logger.info("Baseline: %s", metric)
     files = [str(ctx.results_path), str(ctx.source_path)]
     git_add_commit_push(files, f"results: iteration {ctx.seq:04d}", dry_run=dry_run)
 

@@ -16,7 +16,7 @@ from autoforge.agent.git_ops import (
     push_submodule,
     record_result_or_revert,
 )
-from autoforge.agent.hints import hints_summary, list_topics, resolve_arch
+from autoforge.agent.hints import hints_file_ref, list_topics, resolve_arch
 from autoforge.agent.history import (
     append_result,
     best_result,
@@ -45,7 +45,7 @@ from autoforge.agent.strategy import (
     extract_profile_summary,
     format_context,
     format_profile_lines,
-    validate_change,
+    has_submodule_change,
 )
 from autoforge.campaign import (
     CampaignConfig,
@@ -107,7 +107,7 @@ def cmd_submit(
     source_path = _source_path(campaign)
     req = requests_dir()
 
-    if not validate_change(source_path):
+    if not has_submodule_change(source_path):
         print("ERROR: No submodule change detected. Commit in the submodule first.")
         sys.exit(1)
 
@@ -298,7 +298,7 @@ def cmd_finale(campaign: CampaignConfig, dry_run: bool) -> None:
     source_path = _source_path(campaign)
     req = requests_dir()
 
-    if not validate_change(source_path):
+    if not has_submodule_change(source_path):
         print("ERROR: No submodule change detected. Commit in the submodule first.")
         sys.exit(1)
 
@@ -393,7 +393,7 @@ def cmd_hints(
             for t in topics:
                 print(f"  - {t}")
         else:
-            print(hints_summary(arch, topic))
+            print(hints_file_ref(arch, topic))
     except (ValueError, FileNotFoundError) as exc:
         print(f"ERROR: {exc}")
         sys.exit(1)

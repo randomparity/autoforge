@@ -20,7 +20,7 @@ from autoforge.agent.protocol import (
     next_sequence,
     poll_for_completion,
 )
-from autoforge.agent.strategy import extract_profile_summary, format_context, validate_change
+from autoforge.agent.strategy import extract_profile_summary, format_context, has_submodule_change
 
 __all__ = [
     "append_result",
@@ -42,5 +42,5 @@ __all__ = [
     "poll_for_completion",
     "ResultContext",
     "record_result_or_revert",
-    "validate_change",
+    "has_submodule_change",
 ]

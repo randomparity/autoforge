@@ -77,7 +77,7 @@ autoforge/perf/        Profiling: perf record orchestration, stack analysis, arc
 - `loop.py` — interactive iteration loop (manual fallback)
 - `git_ops.py` — git subprocess wrappers (imports `GIT_TIMEOUT` from `autoforge.protocol`), `record_result_or_revert()`, `full_revert()`, `force_push_source()`
 - `project.py` — `init_project()` for scaffolding new projects
-- `strategy.py` — `format_context()`, `validate_change()`, `extract_profile_summary()`
+- `strategy.py` — `format_context()`, `has_submodule_change()`, `extract_profile_summary()`
 - `history.py` — TSV-based results/failures tracking
 - `metric.py` — `compare_metric()`, `below_threshold()`, `Direction` Literal type
 - `protocol.py` — request creation (`create_request()`), sequence numbering, `poll_for_completion()`, `find_request_by_seq()`

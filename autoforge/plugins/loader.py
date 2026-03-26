@@ -50,10 +50,6 @@ class PipelineComponents:
     profiler: Profiler | None
 
 
-def _projects_root() -> Path:
-    return PROJECTS_ROOT
-
-
 def _find_plugin_file(project: str, category: str, name: str, root: Path | None = None) -> Path:
     """Locate the plugin file on disk.
 
@@ -74,7 +70,7 @@ def _find_plugin_file(project: str, category: str, name: str, root: Path | None 
         msg = f"Invalid category {category!r}, must be one of {sorted(CATEGORY_MAP)}"
         raise ValueError(msg)
 
-    projects = root or _projects_root()
+    projects = root or PROJECTS_ROOT
     category_dir = projects / project / CATEGORY_MAP[category]
     plugin_path = category_dir / f"{name}.py"
 
@@ -218,7 +214,7 @@ def list_components(
         msg = f"Invalid category {category!r}, must be one of {sorted(CATEGORY_MAP)}"
         raise ValueError(msg)
 
-    projects = root or _projects_root()
+    projects = root or PROJECTS_ROOT
     category_dir = projects / project / CATEGORY_MAP[category]
 
     if not category_dir.is_dir():
