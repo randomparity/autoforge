@@ -487,8 +487,8 @@ def main() -> None:
     if args.command == "doctor":
         from autoforge.agent.doctor import format_results, run_doctor
 
-        results = run_doctor(role=args.role)
-        print(format_results(results))
+        results, effective_config = run_doctor(role=args.role)
+        print(format_results(results, effective_config))
         if any(r.status == "fail" for r in results):
             sys.exit(1)
         return

@@ -17,6 +17,9 @@ ICONS: dict[StatusLevel, str] = {"pass": "OK", "warn": "WARN", "fail": "FAIL"}
 VALID_PHASES = {"all", "build", "deploy", "test"}
 VALID_DIRECTIONS = {"maximize", "minimize"}
 
+# Deploy plugins that are known pass-throughs (no config needed)
+PASSTHROUGH_DEPLOYS = {"local"}
+
 
 @dataclass
 class CheckResult:
@@ -26,6 +29,15 @@ class CheckResult:
     status: StatusLevel
     message: str
     layer: str
+    path: str = ""
+
+
+def _rel(path: Path, root: Path) -> str:
+    """Return path relative to root for display."""
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
 
 
 def _load_toml(path: Path) -> tuple[dict[str, Any] | None, str]:
@@ -39,18 +51,25 @@ def _load_toml(path: Path) -> tuple[dict[str, Any] | None, str]:
         return None, f"read error: {exc}"
 
 
+def _is_git_repo(path: Path) -> bool:
+    """Check if path is a git repository (regular or submodule)."""
+    return (path / ".git").exists()
+
+
 def check_pointer(root: Path = REPO_ROOT) -> list[CheckResult]:
     """Validate the .autoforge.toml pointer file."""
     results: list[CheckResult] = []
     pointer_path = root / ".autoforge.toml"
+    rel = _rel(pointer_path, root)
 
     if not pointer_path.is_file():
         results.append(
             CheckResult(
                 "pointer.file_exists",
                 "fail",
-                ".autoforge.toml not found",
+                f"{rel} not found",
                 "pointer",
+                path=rel,
             )
         )
         return results
@@ -58,8 +77,9 @@ def check_pointer(root: Path = REPO_ROOT) -> list[CheckResult]:
         CheckResult(
             "pointer.file_exists",
             "pass",
-            ".autoforge.toml found",
+            f"{rel}",
             "pointer",
+            path=rel,
         )
     )
 
@@ -69,8 +89,9 @@ def check_pointer(root: Path = REPO_ROOT) -> list[CheckResult]:
             CheckResult(
                 "pointer.valid_toml",
                 "fail",
-                err,
+                f"{rel}: {err}",
                 "pointer",
+                path=rel,
             )
         )
         return results
@@ -80,6 +101,7 @@ def check_pointer(root: Path = REPO_ROOT) -> list[CheckResult]:
             "pass",
             "parsed successfully",
             "pointer",
+            path=rel,
         )
     )
 
@@ -93,6 +115,7 @@ def check_pointer(root: Path = REPO_ROOT) -> list[CheckResult]:
                 "fail",
                 "missing or empty 'project' field",
                 "pointer",
+                path=rel,
             )
         )
     else:
@@ -102,6 +125,7 @@ def check_pointer(root: Path = REPO_ROOT) -> list[CheckResult]:
                 "pass",
                 f"project = {project!r}",
                 "pointer",
+                path=rel,
             )
         )
 
@@ -112,6 +136,7 @@ def check_pointer(root: Path = REPO_ROOT) -> list[CheckResult]:
                 "fail",
                 "missing or empty 'sprint' field",
                 "pointer",
+                path=rel,
             )
         )
     else:
@@ -121,18 +146,21 @@ def check_pointer(root: Path = REPO_ROOT) -> list[CheckResult]:
                 "pass",
                 f"sprint = {sprint!r}",
                 "pointer",
+                path=rel,
             )
         )
 
     if project:
         project_dir = root / "projects" / project
+        rel_proj = _rel(project_dir, root)
         if project_dir.is_dir():
             results.append(
                 CheckResult(
                     "pointer.project_exists",
                     "pass",
-                    f"projects/{project}/ exists",
+                    f"{rel_proj}/ exists",
                     "pointer",
+                    path=rel_proj,
                 )
             )
         else:
@@ -140,20 +168,23 @@ def check_pointer(root: Path = REPO_ROOT) -> list[CheckResult]:
                 CheckResult(
                     "pointer.project_exists",
                     "fail",
-                    f"projects/{project}/ not found",
+                    f"{rel_proj}/ not found",
                     "pointer",
+                    path=rel_proj,
                 )
             )
 
     if project and sprint:
         sprint_dir = root / "projects" / project / "sprints" / sprint
+        rel_sprint = _rel(sprint_dir, root)
         if sprint_dir.is_dir():
             results.append(
                 CheckResult(
                     "pointer.sprint_exists",
                     "pass",
-                    f"sprints/{sprint}/ exists",
+                    f"{rel_sprint}/ exists",
                     "pointer",
+                    path=rel_sprint,
                 )
             )
         else:
@@ -161,8 +192,9 @@ def check_pointer(root: Path = REPO_ROOT) -> list[CheckResult]:
                 CheckResult(
                     "pointer.sprint_exists",
                     "fail",
-                    f"sprints/{sprint}/ not found",
+                    f"{rel_sprint}/ not found",
                     "pointer",
+                    path=rel_sprint,
                 )
             )
 
@@ -177,14 +209,16 @@ def check_campaign(
     """Validate the campaign TOML for the active sprint."""
     results: list[CheckResult] = []
     path = root / "projects" / project / "sprints" / sprint / "campaign.toml"
+    rel = _rel(path, root)
 
     if not path.is_file():
         results.append(
             CheckResult(
                 "campaign.file_exists",
                 "fail",
-                "campaign.toml not found",
+                f"{rel} not found",
                 "campaign",
+                path=rel,
             )
         )
         return results
@@ -192,8 +226,9 @@ def check_campaign(
         CheckResult(
             "campaign.file_exists",
             "pass",
-            "campaign.toml found",
+            rel,
             "campaign",
+            path=rel,
         )
     )
 
@@ -203,8 +238,9 @@ def check_campaign(
             CheckResult(
                 "campaign.valid_toml",
                 "fail",
-                err,
+                f"{rel}: {err}",
                 "campaign",
+                path=rel,
             )
         )
         return results
@@ -214,6 +250,7 @@ def check_campaign(
             "pass",
             "parsed successfully",
             "campaign",
+            path=rel,
         )
     )
 
@@ -225,6 +262,7 @@ def check_campaign(
                     "pass",
                     f"[{section}] present",
                     "campaign",
+                    path=rel,
                 )
             )
         else:
@@ -234,6 +272,7 @@ def check_campaign(
                     "fail",
                     f"[{section}] section missing",
                     "campaign",
+                    path=rel,
                 )
             )
 
@@ -246,6 +285,7 @@ def check_campaign(
                 "pass",
                 f"direction = {direction!r}",
                 "campaign",
+                path=rel,
             )
         )
     elif direction:
@@ -255,6 +295,7 @@ def check_campaign(
                 "fail",
                 f"expected 'maximize' or 'minimize', got {direction!r}",
                 "campaign",
+                path=rel,
             )
         )
     else:
@@ -264,6 +305,7 @@ def check_campaign(
                 "fail",
                 "metric.direction not set",
                 "campaign",
+                path=rel,
             )
         )
 
@@ -277,6 +319,7 @@ def check_campaign(
                     "pass",
                     f"project.{field} = {val!r}",
                     "campaign",
+                    path=rel,
                 )
             )
         else:
@@ -286,28 +329,42 @@ def check_campaign(
                     "fail",
                     f"project.{field} not set",
                     "campaign",
+                    path=rel,
                 )
             )
 
     submodule = proj.get("submodule_path", "")
     if submodule:
         sub_path = root / submodule
-        if sub_path.is_dir():
-            results.append(
-                CheckResult(
-                    "campaign.submodule_path",
-                    "pass",
-                    f"{submodule} exists",
-                    "campaign",
-                )
-            )
-        else:
+        if not sub_path.is_dir():
             results.append(
                 CheckResult(
                     "campaign.submodule_path",
                     "warn",
                     f"{submodule} not found on disk",
                     "campaign",
+                    path=submodule,
+                )
+            )
+        elif not _is_git_repo(sub_path):
+            results.append(
+                CheckResult(
+                    "campaign.submodule_path",
+                    "warn",
+                    f"{submodule} exists but is not a git repository"
+                    " (run: git submodule update --init)",
+                    "campaign",
+                    path=submodule,
+                )
+            )
+        else:
+            results.append(
+                CheckResult(
+                    "campaign.submodule_path",
+                    "pass",
+                    f"{submodule} is a git repository",
+                    "campaign",
+                    path=submodule,
                 )
             )
 
@@ -319,6 +376,7 @@ def check_campaign(
                 "pass",
                 f"scope has {len(scope)} entries",
                 "campaign",
+                path=rel,
             )
         )
     else:
@@ -328,6 +386,7 @@ def check_campaign(
                 "warn",
                 "project.scope is empty or not set",
                 "campaign",
+                path=rel,
             )
         )
 
@@ -341,6 +400,7 @@ def check_campaign(
                     "pass",
                     f"profiler = {profiler!r}",
                     "campaign",
+                    path=rel,
                 )
             )
         else:
@@ -350,6 +410,7 @@ def check_campaign(
                     "fail",
                     "profiling enabled but project.profiler not set",
                     "campaign",
+                    path=rel,
                 )
             )
 
@@ -376,14 +437,16 @@ def check_runner(
         return results
 
     path = root / "projects" / project / "runner.toml"
+    rel = _rel(path, root)
 
     if not path.is_file():
         results.append(
             CheckResult(
                 "runner.file_exists",
                 "fail",
-                f"projects/{project}/runner.toml not found (copy from runner.toml.example)",
+                f"{rel} not found (copy from runner.toml.example)",
                 "runner",
+                path=rel,
             )
         )
         return results
@@ -391,8 +454,9 @@ def check_runner(
         CheckResult(
             "runner.file_exists",
             "pass",
-            "runner.toml found",
+            rel,
             "runner",
+            path=rel,
         )
     )
 
@@ -402,8 +466,9 @@ def check_runner(
             CheckResult(
                 "runner.valid_toml",
                 "fail",
-                err,
+                f"{rel}: {err}",
                 "runner",
+                path=rel,
             )
         )
         return results
@@ -413,6 +478,7 @@ def check_runner(
             "pass",
             "parsed successfully",
             "runner",
+            path=rel,
         )
     )
 
@@ -424,6 +490,7 @@ def check_runner(
                 "pass",
                 "[paths] present",
                 "runner",
+                path=rel,
             )
         )
     else:
@@ -433,6 +500,7 @@ def check_runner(
                 "fail",
                 "[paths] section missing",
                 "runner",
+                path=rel,
             )
         )
 
@@ -444,6 +512,7 @@ def check_runner(
                 "pass",
                 f"{dpdk_src} exists",
                 "runner",
+                path=dpdk_src,
             )
         )
     elif dpdk_src:
@@ -453,6 +522,7 @@ def check_runner(
                 "warn",
                 f"{dpdk_src} not found on disk",
                 "runner",
+                path=dpdk_src,
             )
         )
 
@@ -464,6 +534,7 @@ def check_runner(
                 "pass",
                 f"build={timeouts['build_minutes']}m, test={timeouts['test_minutes']}m",
                 "runner",
+                path=rel,
             )
         )
     else:
@@ -473,6 +544,7 @@ def check_runner(
                 "fail",
                 "[timeouts] missing build_minutes or test_minutes",
                 "runner",
+                path=rel,
             )
         )
 
@@ -485,6 +557,7 @@ def check_runner(
                 "pass",
                 f"phase = {phase!r}",
                 "runner",
+                path=rel,
             )
         )
     else:
@@ -494,6 +567,7 @@ def check_runner(
                 "fail",
                 f"invalid phase {phase!r}, expected one of {sorted(VALID_PHASES)}",
                 "runner",
+                path=rel,
             )
         )
 
@@ -527,14 +601,17 @@ def check_plugins(
         plugin_dir = root / "projects" / project / directory
         py_path = plugin_dir / f"{name}.py"
         toml_path = plugin_dir / f"{name}.toml"
+        rel_py = _rel(py_path, root)
+        rel_toml = _rel(toml_path, root)
 
         if py_path.is_file():
             results.append(
                 CheckResult(
                     f"plugin.{category}.file_exists",
                     "pass",
-                    f"{directory}/{name}.py found",
+                    f"{rel_py}",
                     "plugin",
+                    path=rel_py,
                 )
             )
         else:
@@ -542,8 +619,9 @@ def check_plugins(
                 CheckResult(
                     f"plugin.{category}.file_exists",
                     "fail",
-                    f"{directory}/{name}.py not found",
+                    f"{rel_py} not found",
                     "plugin",
+                    path=rel_py,
                 )
             )
 
@@ -554,8 +632,9 @@ def check_plugins(
                     CheckResult(
                         f"plugin.{category}.config_valid",
                         "pass",
-                        f"{directory}/{name}.toml valid",
+                        rel_toml,
                         "plugin",
+                        path=rel_toml,
                     )
                 )
             else:
@@ -563,17 +642,29 @@ def check_plugins(
                     CheckResult(
                         f"plugin.{category}.config_valid",
                         "fail",
-                        f"{directory}/{name}.toml: {err}",
+                        f"{rel_toml}: {err}",
                         "plugin",
+                        path=rel_toml,
                     )
                 )
+        elif category == "deploy" and name in PASSTHROUGH_DEPLOYS:
+            results.append(
+                CheckResult(
+                    f"plugin.{category}.config_exists",
+                    "pass",
+                    f"{name} deployer is a pass-through (no config needed)",
+                    "plugin",
+                    path=rel_toml,
+                )
+            )
         else:
             results.append(
                 CheckResult(
                     f"plugin.{category}.config_exists",
                     "warn",
-                    f"{directory}/{name}.toml not found (plugin may not need config)",
+                    f"{rel_toml} not found (copy from .toml.example if available)",
                     "plugin",
+                    path=rel_toml,
                 )
             )
 
@@ -588,15 +679,18 @@ def check_sprint(
     """Validate sprint directory structure."""
     results: list[CheckResult] = []
     sprint_dir = root / "projects" / project / "sprints" / sprint
+    rel_sprint = _rel(sprint_dir, root)
 
     requests = sprint_dir / "requests"
+    rel_req = f"{rel_sprint}/requests"
     if requests.is_dir():
         results.append(
             CheckResult(
                 "sprint.requests_dir",
                 "pass",
-                "requests/ exists",
+                f"{rel_req}/ exists",
                 "sprint",
+                path=rel_req,
             )
         )
     else:
@@ -604,19 +698,22 @@ def check_sprint(
             CheckResult(
                 "sprint.requests_dir",
                 "fail",
-                "requests/ directory missing",
+                f"{rel_req}/ missing",
                 "sprint",
+                path=rel_req,
             )
         )
 
     results_tsv = sprint_dir / "results.tsv"
+    rel_tsv = f"{rel_sprint}/results.tsv"
     if results_tsv.is_file():
         results.append(
             CheckResult(
                 "sprint.results_tsv",
                 "pass",
-                "results.tsv exists",
+                rel_tsv,
                 "sprint",
+                path=rel_tsv,
             )
         )
     else:
@@ -624,23 +721,184 @@ def check_sprint(
             CheckResult(
                 "sprint.results_tsv",
                 "warn",
-                "results.tsv not found (created on first result)",
+                f"{rel_tsv} not found (created on first result)",
                 "sprint",
+                path=rel_tsv,
             )
         )
 
     return results
 
 
+def _collect_effective_config(
+    project: str,
+    sprint: str,
+    role: str,
+    root: Path,
+) -> dict[str, Any]:
+    """Collect the effective merged configuration for display."""
+    config: dict[str, Any] = {
+        "project": project,
+        "sprint": sprint,
+    }
+
+    # Campaign
+    campaign_path = root / "projects" / project / "sprints" / sprint / "campaign.toml"
+    if campaign_path.is_file():
+        data, _ = _load_toml(campaign_path)
+        if data:
+            proj = data.get("project", {})
+            config["plugins"] = {
+                "build": proj.get("build", ""),
+                "deploy": proj.get("deploy", ""),
+                "test": proj.get("test", ""),
+                "profiler": proj.get("profiler", ""),
+            }
+            config["metric"] = data.get("metric", {})
+            config["platform"] = data.get("platform", {})
+            config["profiling"] = data.get("profiling", {})
+            config["submodule_path"] = proj.get("submodule_path", "")
+            config["scope"] = proj.get("scope", [])
+
+    # Runner (only if not agent-only)
+    if role != "agent":
+        runner_path = root / "projects" / project / "runner.toml"
+        if runner_path.is_file():
+            data, _ = _load_toml(runner_path)
+            if data:
+                config["runner"] = data.get("runner", {})
+                config["paths"] = data.get("paths", {})
+                config["timeouts"] = data.get("timeouts", {})
+
+    # Plugin configs
+    if "plugins" in config:
+        plugin_configs: dict[str, dict[str, Any]] = {}
+        for category, directory in CATEGORY_MAP.items():
+            name = config["plugins"].get(category, "")
+            if not name:
+                continue
+            toml_path = root / "projects" / project / directory / f"{name}.toml"
+            if toml_path.is_file():
+                data, _ = _load_toml(toml_path)
+                if data:
+                    plugin_configs[f"{directory}/{name}.toml"] = data
+        if plugin_configs:
+            config["plugin_configs"] = plugin_configs
+
+    return config
+
+
+def _format_config_value(value: Any, indent: int = 0) -> str:
+    """Format a config value for display."""
+    prefix = "  " * indent
+    if isinstance(value, dict):
+        if not value:
+            return "{}"
+        lines = []
+        for k, v in value.items():
+            formatted = _format_config_value(v, indent + 1)
+            if "\n" in formatted:
+                lines.append(f"{prefix}  {k}:")
+                lines.append(formatted)
+            else:
+                lines.append(f"{prefix}  {k}: {formatted}")
+        return "\n".join(lines)
+    if isinstance(value, list):
+        if not value:
+            return "[]"
+        if all(isinstance(v, str) for v in value) and len(value) <= 5:
+            return "[" + ", ".join(repr(v) for v in value) + "]"
+        lines = []
+        for v in value:
+            lines.append(f"{prefix}  - {v}")
+        return "\n".join(lines)
+    return repr(value)
+
+
+def format_effective_config(config: dict[str, Any]) -> str:
+    """Format the effective configuration as a readable summary."""
+    lines: list[str] = ["\n[effective config]"]
+
+    lines.append(f"  project: {config.get('project', '?')}")
+    lines.append(f"  sprint:  {config.get('sprint', '?')}")
+
+    platform = config.get("platform", {})
+    if platform:
+        lines.append(f"  arch:    {platform.get('arch', '?')}")
+
+    plugins = config.get("plugins", {})
+    if plugins:
+        lines.append("  plugins:")
+        for category in ("build", "deploy", "test", "profiler"):
+            name = plugins.get(category, "")
+            if name:
+                lines.append(f"    {category}: {name}")
+
+    metric = config.get("metric", {})
+    if metric:
+        lines.append(
+            f"  metric:  {metric.get('name', '?')}"
+            f" ({metric.get('direction', '?')},"
+            f" threshold={metric.get('threshold', '?')})"
+        )
+
+    submodule = config.get("submodule_path", "")
+    if submodule:
+        lines.append(f"  source:  {submodule}")
+
+    scope = config.get("scope", [])
+    if scope:
+        lines.append(f"  scope:   {len(scope)} paths")
+
+    profiling = config.get("profiling", {})
+    if profiling:
+        lines.append(f"  profiling: {'enabled' if profiling.get('enabled') else 'disabled'}")
+
+    runner = config.get("runner", {})
+    if runner:
+        lines.append(f"  phase:   {runner.get('phase', 'all')}")
+
+    paths = config.get("paths", {})
+    if paths:
+        lines.append("  paths:")
+        for k, v in paths.items():
+            lines.append(f"    {k}: {v}")
+
+    timeouts = config.get("timeouts", {})
+    if timeouts:
+        lines.append(
+            f"  timeouts: build={timeouts.get('build_minutes', '?')}m,"
+            f" test={timeouts.get('test_minutes', '?')}m"
+        )
+
+    plugin_configs = config.get("plugin_configs", {})
+    if plugin_configs:
+        lines.append("  plugin configs:")
+        for file_name, data in plugin_configs.items():
+            lines.append(f"    {file_name}:")
+            for section, values in data.items():
+                if isinstance(values, dict):
+                    lines.append(f"      [{section}]")
+                    for k, v in values.items():
+                        lines.append(f"        {k}: {v!r}")
+                else:
+                    lines.append(f"      {section}: {values!r}")
+
+    return "\n".join(lines)
+
+
 def run_doctor(
     role: str = "all",
     root: Path = REPO_ROOT,
-) -> list[CheckResult]:
+) -> tuple[list[CheckResult], dict[str, Any]]:
     """Run all configuration checks.
 
     Args:
         role: "agent", "runner", or "all".
         root: Repository root (override for testing).
+
+    Returns:
+        Tuple of (check results, effective config dict).
     """
     results: list[CheckResult] = []
 
@@ -648,7 +906,7 @@ def run_doctor(
     pointer_results = check_pointer(root)
     results.extend(pointer_results)
     if any(r.status == "fail" for r in pointer_results):
-        return results
+        return results, {}
 
     # Extract project/sprint from pointer
     pointer_path = root / ".autoforge.toml"
@@ -679,10 +937,16 @@ def run_doctor(
     # Layer 5: Sprint structure
     results.extend(check_sprint(project, sprint, root))
 
-    return results
+    # Collect effective config
+    effective = _collect_effective_config(project, sprint, role, root)
+
+    return results, effective
 
 
-def format_results(results: list[CheckResult]) -> str:
+def format_results(
+    results: list[CheckResult],
+    effective_config: dict[str, Any] | None = None,
+) -> str:
     """Format check results as human-readable output."""
     lines: list[str] = []
     current_layer = ""
@@ -698,5 +962,8 @@ def format_results(results: list[CheckResult]) -> str:
     warns = sum(1 for r in results if r.status == "warn")
     passes = sum(1 for r in results if r.status == "pass")
     lines.append(f"\n{passes} passed, {warns} warnings, {fails} errors")
+
+    if effective_config:
+        lines.append(format_effective_config(effective_config))
 
     return "\n".join(lines)
