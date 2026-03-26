@@ -60,8 +60,9 @@ pending → claimed → building → built → deploying → deployed → runnin
 ### Package boundaries
 
 ```
-autoforge/campaign.py  Shared: CampaignConfig, pointer load/save, campaign resolution
-autoforge/protocol/    Shared: TestRequest, status constants, StatusLiteral, extract_metric
+autoforge/pointer.py   Shared: REPO_ROOT, PointerConfig, load_pointer(), save_pointer()
+autoforge/campaign.py  Shared: CampaignConfig, typed accessor functions, campaign resolution
+autoforge/protocol/    Shared: TestRequest, Direction, GIT_TIMEOUT, status constants, StatusLiteral, extract_metric
 autoforge/plugins/     Plugin protocols (Builder, Deployer, Tester, Plugin) and loader
 autoforge/agent/       Workstation: CLI subcommands, git ops, history tracking
 autoforge/runner/      Lab machine: service loop, git-based state transitions
@@ -75,17 +76,17 @@ autoforge/perf/        Profiling: perf record orchestration, stack analysis, arc
 - `cli.py` — CLI subcommands (`context`, `submit`, `poll`, `judge`, `baseline`, `finale`, `revert`, `build-log`, `status`, `hints`, `sprint`, `project`, `summarize`, `doctor`) for Claude Code
 - `hints.py` — architecture-specific optimization hints lookup (supports topics: optimization, perf-counters)
 - `loop.py` — interactive iteration loop (manual fallback)
-- `git_ops.py` — git subprocess wrappers (imports `GIT_TIMEOUT` from `autoforge.protocol`), `record_result_or_revert()`, `full_revert()`, `force_push_source()`
+- `git_ops.py` — git subprocess wrappers, `ResultContext`, `record_result_or_revert()`, `full_revert()`, `force_push_source()`
 - `project.py` — `init_project()` for scaffolding new projects
 - `strategy.py` — `format_context()`, `has_submodule_change()`, `extract_profile_summary()`
 - `history.py` — TSV-based results/failures tracking
-- `metric.py` — `compare_metric()`, `below_threshold()`, `Direction` Literal type
+- `metric.py` — `compare_metric()`, `below_threshold()`
 - `protocol.py` — request creation (`create_request()`), sequence numbering, `poll_for_completion()`, `find_request_by_seq()`
 
 ### Runner modules
 
 - `service.py` — main polling loop, loads plugin, `execute_request()` orchestrates build→deploy→test→push
-- `protocol.py` — git commit/push with retry, `claim()`, `update_status()`, `fail()`
+- `protocol.py` — git commit/push with retry, `claim()`, `update_status()`, `complete_request()`, `fail()`
 
 ### DPDK plugin modules (`projects/dpdk/`)
 
@@ -111,7 +112,7 @@ Campaign config resolution order: explicit `--campaign` flag → `AUTOFORGE_CAMP
 - `StatusLiteral` — `Literal["pending", "claimed", "building", "built", "deploying", "deployed", "running", "completed", "failed"]`
 - `CampaignConfig` — TypedDict hierarchy matching campaign TOML structure
 - `ProjectConfig` — plugin name + project-specific config (scope, submodule_path, etc.)
-- `Direction` — `Literal["maximize", "minimize"]`
+- `Direction` — `Literal["maximize", "minimize"]` in `autoforge.protocol`
 - Plugin protocols: `Builder`, `Deployer`, `Tester`, `Plugin` in `autoforge.plugins.protocols`
 - Plugin results: `BuildResult`, `DeployResult`, `TestResult` in `autoforge.plugins.protocols`
 
