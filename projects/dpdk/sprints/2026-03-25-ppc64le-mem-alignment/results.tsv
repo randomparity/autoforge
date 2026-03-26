@@ -5,3 +5,4 @@ sequence	timestamp	source_commit	metric_value	status	description
 13	2026-03-26T03:28:35.650182+00:00	fedd75e300e0bbdfe1a8d8a7c0316bd042e84e92	169.8307	completed	memif tx: add 4-at-a-time batch path for single-segment packets
 14	2026-03-26T03:38:39.469575+00:00	050762700a833e571dd82b565e08b812b6d25e4a	162.8654	completed	ppc64le memcpy: use __builtin_memcpy for 64-byte fast path
 15	2026-03-26T03:43:14.663135+00:00	e3ebb7e91e514e910c8e8e0e7ec9913efde28055	170.8344	completed	memif rx: expand descriptor length refill to 8-at-a-time
+17	2026-03-26T03:50:46.294870+00:00	39f1e0bc101dda0897a853dd2fd77a9c3cacfe70	170.8963	completed	mempool/ppc64le: add memory channel spreading for POWER9
