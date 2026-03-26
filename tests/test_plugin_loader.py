@@ -9,15 +9,20 @@ from autoforge.plugins import (
     BuildResult,
     Deployer,
     DeployResult,
+    Judge,
+    JudgeVerdict,
     Profiler,
     ProfileResult,
     Tester,
     TestResult,
 )
 from autoforge.plugins.loader import (
+    CATEGORY_MAP,
+    CATEGORY_PROTOCOLS,
     PipelineComponents,
     list_components,
     load_component,
+    load_judge,
     load_pipeline,
     load_plugin_config,
 )
@@ -300,3 +305,61 @@ class TestResultDataclasses:
         assert r.summary == {}
         assert r.error is None
         assert r.duration_seconds == 0.0
+
+    def test_judge_verdict_fields(self) -> None:
+        v = JudgeVerdict(keep=True, reason="above threshold")
+        assert v.keep is True
+        assert v.reason == "above threshold"
+
+
+JUDGE_SOURCE = """\
+from autoforge.plugins.protocols import JudgeVerdict
+
+class AlwaysKeepJudge:
+    name = "always-keep"
+
+    def configure(self, project_config, runner_config):
+        pass
+
+    def judge(self, metric, best_val, direction, campaign, request):
+        return JudgeVerdict(keep=True, reason="always keep")
+"""
+
+
+class TestJudgePlugin:
+    def _setup_judge(self, tmp_path, project="testproj"):
+        judges_dir = tmp_path / project / "judges"
+        judges_dir.mkdir(parents=True)
+        (judges_dir / "always-keep.py").write_text(JUDGE_SOURCE)
+
+    def test_judge_in_category_map(self) -> None:
+        assert "judge" in CATEGORY_MAP
+        assert CATEGORY_MAP["judge"] == "judges"
+
+    def test_judge_in_category_protocols(self) -> None:
+        assert "judge" in CATEGORY_PROTOCOLS
+        assert CATEGORY_PROTOCOLS["judge"] is Judge
+
+    def test_load_judge_via_load_component(self, tmp_path) -> None:
+        self._setup_judge(tmp_path)
+        comp = load_component("testproj", "judge", "always-keep", root=tmp_path)
+        assert isinstance(comp, Judge)
+        assert comp.name == "always-keep"
+
+    def test_load_judge_convenience(self, tmp_path) -> None:
+        self._setup_judge(tmp_path)
+        j = load_judge("testproj", "always-keep", root=tmp_path)
+        assert isinstance(j, Judge)
+
+    def test_judge_returns_verdict(self, tmp_path) -> None:
+        self._setup_judge(tmp_path)
+        j = load_judge("testproj", "always-keep", root=tmp_path)
+        verdict = j.judge(90.0, 86.0, "maximize", {}, None)  # type: ignore[arg-type]
+        assert isinstance(verdict, JudgeVerdict)
+        assert verdict.keep is True
+        assert verdict.reason == "always keep"
+
+    def test_judge_missing_raises(self, tmp_path) -> None:
+        self._setup_judge(tmp_path)
+        with pytest.raises(FileNotFoundError, match="not found"):
+            load_judge("testproj", "nonexistent", root=tmp_path)

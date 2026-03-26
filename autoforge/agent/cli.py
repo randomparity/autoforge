@@ -51,10 +51,12 @@ from autoforge.campaign import (
     CampaignConfig,
     agent_poll_interval,
     agent_timeout,
+    judge_plugin,
     load_campaign,
     metric_direction,
     optimization_branch,
     platform_arch,
+    project_name,
     resolve_campaign_path,
     submodule_path,
 )
@@ -212,7 +214,18 @@ def cmd_judge(campaign: CampaignConfig, dry_run: bool) -> None:
         failures_path=fail,
         optimization_branch=optimization_branch(campaign),
     )
-    record_result_or_revert(metric, best_val, direction, ctx, dry_run=dry_run)
+
+    judge_name = judge_plugin(campaign)
+    if judge_name:
+        from autoforge.agent.git_ops import record_verdict
+        from autoforge.plugins.loader import load_judge
+
+        j = load_judge(project_name(campaign), judge_name)
+        verdict = j.judge(metric, best_val, direction, campaign, latest)
+        print(f"Judge '{judge_name}': {'keep' if verdict.keep else 'revert'} — {verdict.reason}")
+        record_verdict(verdict.keep, metric, best_val, ctx, dry_run=dry_run)
+    else:
+        record_result_or_revert(metric, best_val, direction, ctx, dry_run=dry_run)
 
 
 def _poll_and_record(

@@ -159,3 +159,52 @@ class TestRecordResultOrRevertWithBranch:
             )
 
         mock_push.assert_not_called()
+
+
+class TestRecordVerdict:
+    def _make_ctx(self, tmp_path: Path) -> tuple:
+        from autoforge.agent.git_ops import ResultContext
+
+        res = tmp_path / "results.tsv"
+        res.write_text("sequence\ttimestamp\tsource_commit\tmetric_value\tstatus\tdescription\n")
+        fail = tmp_path / "failures.tsv"
+        dpdk = tmp_path / "dpdk"
+        dpdk.mkdir()
+        ctx = ResultContext(
+            seq=5,
+            commit="abc123",
+            description="test change",
+            source_path=dpdk,
+            results_path=res,
+            failures_path=fail,
+            optimization_branch="autoforge/optimize",
+        )
+        return ctx, dpdk
+
+    def test_keep_calls_record_improvement(self, tmp_path: Path) -> None:
+        from autoforge.agent.git_ops import record_verdict
+
+        ctx, dpdk = self._make_ctx(tmp_path)
+        with (
+            patch("autoforge.agent.git_ops.git_add_commit_push") as mock_commit,
+            patch("autoforge.agent.git_ops.revert_last_change") as mock_revert,
+        ):
+            record_verdict(keep=True, metric=90.0, best_val=86.0, ctx=ctx, dry_run=True)
+
+        mock_commit.assert_called_once()
+        mock_revert.assert_not_called()
+
+    def test_revert_calls_revert_and_record_failure(self, tmp_path: Path) -> None:
+        from autoforge.agent.git_ops import record_verdict
+
+        ctx, dpdk = self._make_ctx(tmp_path)
+        with (
+            patch("autoforge.agent.git_ops.git_add_commit_push") as mock_commit,
+            patch("autoforge.agent.git_ops.revert_last_change") as mock_revert,
+            patch("autoforge.agent.git_ops.capture_diff_summary", return_value="1 file"),
+            patch("autoforge.agent.git_ops.force_push_source"),
+        ):
+            record_verdict(keep=False, metric=80.0, best_val=86.0, ctx=ctx, dry_run=False)
+
+        mock_revert.assert_called_once_with(dpdk)
+        mock_commit.assert_called_once()

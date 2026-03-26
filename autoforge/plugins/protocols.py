@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from autoforge.campaign import ProjectConfig
+    from autoforge.campaign import CampaignConfig, ProjectConfig
+    from autoforge.protocol import Direction, TestRequest
 
 
 @dataclass
@@ -110,4 +111,34 @@ class Profiler(Protocol):
 
     def profile(self, pid: int, duration: int, config: dict[str, Any]) -> ProfileResult:
         """Profile a running process and return the result."""
+        ...
+
+
+@dataclass
+class JudgeVerdict:
+    """Decision returned by a judge plugin."""
+
+    keep: bool
+    reason: str
+
+
+@runtime_checkable
+class Judge(Protocol):
+    """Decides whether to keep or revert a completed test result."""
+
+    name: str
+
+    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
+        """Store configuration for subsequent judge calls."""
+        ...
+
+    def judge(
+        self,
+        metric: float | None,
+        best_val: float | None,
+        direction: Direction,
+        campaign: CampaignConfig,
+        request: TestRequest,
+    ) -> JudgeVerdict:
+        """Return a verdict for whether to keep or revert the result."""
         ...

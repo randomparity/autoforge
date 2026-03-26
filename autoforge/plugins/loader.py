@@ -15,6 +15,7 @@ from autoforge.campaign import CampaignConfig, project_config
 from autoforge.plugins.protocols import (
     Builder,
     Deployer,
+    Judge,
     Profiler,
     Tester,
 )
@@ -28,6 +29,7 @@ CATEGORY_MAP: dict[str, str] = {
     "deploy": "deploys",
     "test": "tests",
     "profiler": "perfs",
+    "judge": "judges",
 }
 
 CATEGORY_PROTOCOLS: dict[str, type] = {
@@ -35,9 +37,10 @@ CATEGORY_PROTOCOLS: dict[str, type] = {
     "deploy": Deployer,
     "test": Tester,
     "profiler": Profiler,
+    "judge": Judge,
 }
 
-ComponentType = Builder | Deployer | Tester | Profiler
+ComponentType = Builder | Deployer | Tester | Profiler | Judge
 
 
 @dataclass
@@ -221,6 +224,20 @@ def list_components(
         return []
 
     return sorted(p.stem for p in category_dir.glob("*.py") if p.is_file())
+
+
+def load_judge(project: str, name: str, root: Path | None = None) -> Judge:
+    """Load a judge plugin by project and name.
+
+    Args:
+        project: Project name (directory under projects/).
+        name: Plugin name (filename stem).
+        root: Override projects root (for testing).
+
+    Returns:
+        An instantiated Judge plugin.
+    """
+    return load_component(project, "judge", name, root=root)  # type: ignore[return-value]
 
 
 def load_pipeline(

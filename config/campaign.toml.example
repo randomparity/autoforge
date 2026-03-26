@@ -70,6 +70,7 @@ build = "local"
 deploy = "local"
 test = "testpmd-memif"
 profiler = "perf-record"
+# judge = "custom"  # optional: custom judge plugin under projects/<name>/judges/
 # Path to the source git submodule relative to repo root
 submodule_path = "projects/dpdk/repo"
 # Branch in the submodule where good changes accumulate
