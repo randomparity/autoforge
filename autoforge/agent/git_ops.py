@@ -27,7 +27,7 @@ def check_git_clean() -> None:
     Raises DirtyWorkingTreeError with an actionable message if dirty.
     """
     result = subprocess.run(
-        ["git", "status", "--porcelain"],
+        ["git", "status", "--porcelain", "--ignore-submodules"],
         capture_output=True,
         text=True,
         timeout=GIT_TIMEOUT,
