@@ -35,3 +35,5 @@ timestamp	source_commit	metric_value	description	diff_summary
  1 file changed, 2 insertions(+)"
 2026-03-26T13:42:54.797233+00:00	ccb9928052e2be8931a4d48e43547fe8c8679953	185.1043	memif rx: remove unused data_off computation	"drivers/net/memif/rte_eth_memif.c | 2 --
  1 file changed, 2 deletions(-)"
+2026-03-26T13:45:42.619858+00:00	8ade09a97e6164ef42a6fa4eb6f42de88baeefb6	182.6216	memif rx: combine pkt_len+data_len into single 64-bit store	"drivers/net/memif/rte_eth_memif.c | 21 ++++++++++-----------
+ 1 file changed, 10 insertions(+), 11 deletions(-)"
