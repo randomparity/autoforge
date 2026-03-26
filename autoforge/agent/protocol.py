@@ -8,7 +8,8 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from autoforge.protocol import TestRequest
+from autoforge.campaign import CampaignConfig
+from autoforge.protocol import GIT_TIMEOUT, TestRequest
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def next_sequence(requests_dir: Path) -> int:
 def create_request(
     seq: int,
     commit: str,
-    campaign: dict,
+    campaign: CampaignConfig,
     description: str,
     requests_dir: Path,
     *,
@@ -45,10 +46,11 @@ def create_request(
     Args:
         seq: Sequence number for this iteration.
         commit: DPDK submodule commit SHA.
-        campaign: Campaign configuration dict.
+        campaign: Campaign configuration.
         description: Human-readable description of the change.
         requests_dir: Directory to write the request file into.
         skip_profiling: If True, omit the profiler plugin from the request.
+        tags: Optional experiment category tags.
 
     Returns:
         Path to the newly created JSON file.
@@ -127,7 +129,8 @@ def poll_for_completion(
     seq: int,
     timeout: int = 3600,
     interval: int = 30,
-    requests_dir: Path | None = None,
+    *,
+    requests_dir: Path,
 ) -> TestRequest:
     """Poll git until the given request reaches a terminal state.
 
@@ -144,9 +147,6 @@ def poll_for_completion(
         TimeoutError: If the request does not complete within the timeout.
         FileNotFoundError: If the request file cannot be found.
     """
-    if requests_dir is None:
-        msg = "requests_dir is required"
-        raise ValueError(msg)
 
     deadline = time.monotonic() + timeout
 
@@ -155,7 +155,7 @@ def poll_for_completion(
             ["git", "pull", "--rebase"],
             capture_output=True,
             text=True,
-            timeout=60,
+            timeout=GIT_TIMEOUT,
         )
         if pull_result.returncode != 0:
             logger.warning("git pull --rebase failed: %s", pull_result.stderr.strip())

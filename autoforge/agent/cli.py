@@ -47,6 +47,7 @@ from autoforge.agent.strategy import (
     validate_change,
 )
 from autoforge.campaign import CampaignConfig, load_campaign, resolve_campaign_path
+from autoforge.protocol import TestRequest
 
 
 def _source_path(campaign: CampaignConfig) -> Path:
@@ -57,23 +58,11 @@ def _optimization_branch(campaign: CampaignConfig) -> str:
     return campaign.get("project", {}).get("optimization_branch", "")
 
 
-def _req_dir(campaign: CampaignConfig) -> Path:
-    return requests_dir(campaign)
-
-
-def _res_path(campaign: CampaignConfig) -> Path:
-    return results_path(campaign)
-
-
-def _fail_path(campaign: CampaignConfig) -> Path:
-    return failures_path(campaign)
-
-
 def cmd_context(campaign: CampaignConfig) -> None:
     """Print current optimization state."""
-    res = _res_path(campaign)
-    fail = _fail_path(campaign)
-    req = _req_dir(campaign)
+    res = results_path()
+    fail = failures_path()
+    req = requests_dir()
 
     history = load_history(res)
     fails = load_failures(fail)
@@ -82,10 +71,10 @@ def cmd_context(campaign: CampaignConfig) -> None:
     profile = extract_profile_summary(latest) if latest else None
 
     try:
-        name = active_sprint_name(campaign)
+        name = active_sprint_name()
         print(f"Sprint: {name}")
-    except KeyError:
-        pass
+    except (KeyError, FileNotFoundError):
+        print("Sprint: (not configured)")
 
     print(format_context(history, campaign, profile_summary=profile))
 
@@ -105,7 +94,7 @@ def cmd_submit(
     if not dry_run:
         check_git_clean()
     source_path = _source_path(campaign)
-    req = _req_dir(campaign)
+    req = requests_dir()
 
     if not validate_change(source_path):
         print("ERROR: No submodule change detected. Commit in the submodule first.")
@@ -132,7 +121,7 @@ def cmd_submit(
 def cmd_poll(campaign: CampaignConfig) -> None:
     """Poll until the latest request reaches a terminal state."""
     check_git_clean()
-    req = _req_dir(campaign)
+    req = requests_dir()
     latest = find_latest_request(req)
     if latest is None:
         print("No requests found.")
@@ -159,12 +148,12 @@ def cmd_poll(campaign: CampaignConfig) -> None:
     _print_result(result)
 
 
-def _print_result(result: object) -> None:
+def _print_result(result: TestRequest) -> None:
     """Print a completed/failed request result."""
-    seq = getattr(result, "sequence", "?")
-    status = getattr(result, "status", "?")
-    metric = getattr(result, "metric_value", None)
-    error = getattr(result, "error", None)
+    seq = result.sequence
+    status = result.status
+    metric = result.metric_value
+    error = result.error
 
     if status == "failed":
         print(f"Request {seq:04d} FAILED: {error}")
@@ -182,9 +171,9 @@ def cmd_judge(campaign: CampaignConfig, dry_run: bool) -> None:
     if not dry_run:
         check_git_clean()
     source_path = _source_path(campaign)
-    req = _req_dir(campaign)
-    res = _res_path(campaign)
-    fail = _fail_path(campaign)
+    req = requests_dir()
+    res = results_path()
+    fail = failures_path()
     direction = campaign.get("metric", {}).get("direction", "maximize")
 
     latest = find_latest_request(req)
@@ -229,24 +218,16 @@ def cmd_judge(campaign: CampaignConfig, dry_run: bool) -> None:
     )
 
 
-def cmd_baseline(campaign: CampaignConfig, dry_run: bool) -> None:
-    """Submit a baseline request (no code changes) and optionally poll."""
-    if not dry_run:
-        check_git_clean()
-    source_path = _source_path(campaign)
-    req = _req_dir(campaign)
-    commit = git_submodule_head(source_path)
-    seq = next_sequence(req)
-    description = "Baseline: unmodified DPDK"
-
-    request_path = create_request(seq, commit, campaign, description, req)
-    git_add_commit_push(
-        [str(request_path)],
-        f"baseline {seq:04d}: {description}",
-        dry_run=dry_run,
-    )
-    print(f"Baseline request {seq:04d} submitted (commit {commit[:12]}).")
-
+def _poll_and_record(
+    campaign: CampaignConfig,
+    seq: int,
+    req: Path,
+    description: str,
+    label: str,
+    dry_run: bool,
+    request_path: Path,
+) -> None:
+    """Poll for request completion and record result in TSV history."""
     if dry_run:
         print(f"[dry-run] Request written to {request_path}")
         return
@@ -262,13 +243,13 @@ def cmd_baseline(campaign: CampaignConfig, dry_run: bool) -> None:
             requests_dir=req,
         )
     except TimeoutError:
-        print(f"Baseline request {seq:04d} timed out.")
+        print(f"{label.capitalize()} request {seq:04d} timed out.")
         return
 
     _print_result(result)
 
     if result.status == "completed" and result.metric_value is not None:
-        res = _res_path(campaign)
+        res = results_path()
         append_result(
             result.sequence,
             result.source_commit,
@@ -279,12 +260,33 @@ def cmd_baseline(campaign: CampaignConfig, dry_run: bool) -> None:
         )
         git_add_commit_push(
             [str(res)],
-            f"baseline {seq:04d}: recorded result",
+            f"{label} {seq:04d}: recorded result",
             dry_run=False,
         )
-        print("Baseline recorded in results.tsv.")
+        print(f"{label.capitalize()} recorded in results.tsv.")
     elif result.status == "failed":
-        print("Baseline failed — not recorded. Fix the issue and retry.")
+        print(f"{label.capitalize()} failed — not recorded. Fix the issue and retry.")
+
+
+def cmd_baseline(campaign: CampaignConfig, dry_run: bool) -> None:
+    """Submit a baseline request (no code changes) and optionally poll."""
+    if not dry_run:
+        check_git_clean()
+    source_path = _source_path(campaign)
+    req = requests_dir()
+    commit = git_submodule_head(source_path)
+    seq = next_sequence(req)
+    description = "Baseline: unmodified DPDK"
+
+    request_path = create_request(seq, commit, campaign, description, req)
+    git_add_commit_push(
+        [str(request_path)],
+        f"baseline {seq:04d}: {description}",
+        dry_run=dry_run,
+    )
+    print(f"Baseline request {seq:04d} submitted (commit {commit[:12]}).")
+
+    _poll_and_record(campaign, seq, req, description, "baseline", dry_run, request_path)
 
 
 def cmd_finale(campaign: CampaignConfig, dry_run: bool) -> None:
@@ -292,7 +294,7 @@ def cmd_finale(campaign: CampaignConfig, dry_run: bool) -> None:
     if not dry_run:
         check_git_clean()
     source_path = _source_path(campaign)
-    req = _req_dir(campaign)
+    req = requests_dir()
 
     if not validate_change(source_path):
         print("ERROR: No submodule change detected. Commit in the submodule first.")
@@ -321,44 +323,7 @@ def cmd_finale(campaign: CampaignConfig, dry_run: bool) -> None:
     )
     print(f"Finale request {seq:04d} submitted (commit {commit[:12]}).")
 
-    if dry_run:
-        print(f"[dry-run] Request written to {request_path}")
-        return
-
-    poll_interval = campaign.get("agent", {}).get("poll_interval", 30)
-    timeout = campaign.get("agent", {}).get("timeout_minutes", 60) * 60
-
-    try:
-        result = poll_for_completion(
-            seq,
-            timeout=timeout,
-            interval=poll_interval,
-            requests_dir=req,
-        )
-    except TimeoutError:
-        print(f"Finale request {seq:04d} timed out.")
-        return
-
-    _print_result(result)
-
-    if result.status == "completed" and result.metric_value is not None:
-        res = _res_path(campaign)
-        append_result(
-            result.sequence,
-            result.source_commit,
-            result.metric_value,
-            result.status,
-            result.description or description,
-            path=res,
-        )
-        git_add_commit_push(
-            [str(res)],
-            f"finale {seq:04d}: recorded result",
-            dry_run=False,
-        )
-        print("Finale recorded in results.tsv.")
-    elif result.status == "failed":
-        print("Finale failed — not recorded. Fix the issue and retry.")
+    _poll_and_record(campaign, seq, req, description, "finale", dry_run, request_path)
 
 
 def cmd_revert(campaign: CampaignConfig, dry_run: bool) -> None:
@@ -392,7 +357,7 @@ def _format_build_log(log: str) -> str:
 
 def cmd_build_log(campaign: CampaignConfig, seq: int) -> None:
     """Print the build log for a given request sequence number."""
-    req = _req_dir(campaign)
+    req = requests_dir()
     request = find_request_by_seq(seq, req)
 
     if request is None:
@@ -434,7 +399,7 @@ def cmd_hints(
 
 def cmd_status(campaign: CampaignConfig) -> None:
     """Print the latest request status without polling."""
-    req = _req_dir(campaign)
+    req = requests_dir()
     latest = find_latest_request(req)
     if latest is None:
         print("No requests found.")
@@ -448,7 +413,7 @@ def cmd_summarize(campaign: CampaignConfig) -> None:
     from autoforge.agent.summarize import generate_summary
 
     text = generate_summary(campaign)
-    output = docs_dir(campaign) / "summary.md"
+    output = docs_dir() / "summary.md"
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(text)
     print(f"Summary written to {output}")
@@ -482,7 +447,7 @@ def cmd_project_init(name: str) -> None:
 
 def cmd_sprint_list(campaign: CampaignConfig) -> None:
     """List all sprints with summary."""
-    sprints = list_sprints(campaign)
+    sprints = list_sprints()
     if not sprints:
         print("No sprints found.")
         return
@@ -503,8 +468,8 @@ def cmd_sprint_list(campaign: CampaignConfig) -> None:
 def cmd_sprint_active(campaign: CampaignConfig) -> None:
     """Print the active sprint name."""
     try:
-        print(active_sprint_name(campaign))
-    except KeyError as exc:
+        print(active_sprint_name())
+    except (KeyError, FileNotFoundError) as exc:
         print(f"ERROR: {exc}")
         sys.exit(1)
 

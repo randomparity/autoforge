@@ -8,16 +8,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from autoforge.protocol import (
+    GIT_TIMEOUT,
     STATUS_CLAIMED,
     STATUS_FAILED,
-    STATUS_PENDING,
     StatusLiteral,
     TestRequest,
 )
 
 logger = logging.getLogger(__name__)
-
-GIT_TIMEOUT = 60
 
 
 def _git_commit_push(path: Path, message: str, retries: int = 3) -> bool:
@@ -98,11 +96,6 @@ def find_by_status(requests_dir: Path, status: StatusLiteral) -> tuple[TestReque
             return (request, path)
 
     return None
-
-
-def find_pending(requests_dir: Path) -> tuple[TestRequest, Path] | None:
-    """Scan the requests directory for the oldest pending request."""
-    return find_by_status(requests_dir, STATUS_PENDING)
 
 
 def claim(request: TestRequest, request_path: Path) -> bool:
