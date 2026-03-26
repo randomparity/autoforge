@@ -16,6 +16,7 @@ from autoforge.agent.cli import (
     cmd_sprint_init,
     cmd_sprint_list,
 )
+from autoforge.agent.git_ops import DirtyWorkingTreeError, check_git_clean
 
 SAMPLE_CAMPAIGN = {
     "campaign": {"name": "test", "max_iterations": 50},
@@ -31,6 +32,24 @@ SAMPLE_CAMPAIGN = {
 }
 
 SAMPLE_POINTER = {"project": "dpdk", "sprint": "2026-01-01-test"}
+
+
+class TestCheckGitClean:
+    def test_clean_tree_passes(self) -> None:
+        with patch("autoforge.agent.git_ops.subprocess.run") as mock_run:
+            mock_run.return_value.stdout = ""
+            check_git_clean()
+
+    def test_dirty_tree_raises(self) -> None:
+        with patch("autoforge.agent.git_ops.subprocess.run") as mock_run:
+            mock_run.return_value.stdout = " M some/file.py\n"
+            with pytest.raises(DirtyWorkingTreeError, match="some/file.py"):
+                check_git_clean()
+
+    def test_claude_dir_ignored(self) -> None:
+        with patch("autoforge.agent.git_ops.subprocess.run") as mock_run:
+            mock_run.return_value.stdout = "?? .claude/\n"
+            check_git_clean()
 
 
 class TestCmdSprintInit:
@@ -106,6 +125,7 @@ class TestCmdSprintActive:
 class TestCmdRevert:
     def test_revert_calls_full_revert(self, capsys: pytest.CaptureFixture) -> None:
         with (
+            patch("autoforge.agent.cli.check_git_clean"),
             patch("autoforge.agent.cli.full_revert", return_value="abc123def456") as mock_revert,
             patch("autoforge.agent.cli.git_submodule_head", return_value="def456abc123"),
         ):

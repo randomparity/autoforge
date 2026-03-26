@@ -18,7 +18,7 @@ lcores = "4-7"
 # WARNING: The memif PMD silently ignores zero-copy=yes on the server role.
 # Only the client supports zero-copy.
 vdev = [
-    "net_memif0,role=server,id=0,zero-copy=yes,bsize=2048,rsize=12",
+    "net_memif0,role=server,id=0,bsize=2048,rsize=12",
     "net_memif1,role=client,id=0,zero-copy=yes,bsize=2048,rsize=12",
 ]
 
@@ -26,7 +26,7 @@ vdev = [
 no_pci = true
 
 # Additional EAL arguments passed verbatim (list of strings)
-# extra_eal_args = ["--single-file-segments"]
+extra_eal_args = ["--single-file-segments"]
 
 # --- Testpmd application arguments ---
 

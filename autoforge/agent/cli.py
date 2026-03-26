@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from autoforge.agent.git_ops import (
+    check_git_clean,
     full_revert,
     git_add_commit_push,
     git_submodule_head,
@@ -94,6 +95,8 @@ def cmd_context(campaign: CampaignConfig) -> None:
 
 def cmd_submit(campaign: CampaignConfig, description: str, dry_run: bool) -> None:
     """Validate submodule change, create request, commit, push."""
+    if not dry_run:
+        check_git_clean()
     source_path = _source_path(campaign)
     req = _req_dir(campaign)
 
@@ -115,6 +118,7 @@ def cmd_submit(campaign: CampaignConfig, description: str, dry_run: bool) -> Non
 
 def cmd_poll(campaign: CampaignConfig) -> None:
     """Poll until the latest request reaches a terminal state."""
+    check_git_clean()
     req = _req_dir(campaign)
     latest = find_latest_request(req)
     if latest is None:
@@ -162,6 +166,8 @@ def _print_result(result: object) -> None:
 
 def cmd_judge(campaign: CampaignConfig, dry_run: bool) -> None:
     """Compare latest result to best, keep or revert, record in TSV."""
+    if not dry_run:
+        check_git_clean()
     source_path = _source_path(campaign)
     req = _req_dir(campaign)
     res = _res_path(campaign)
@@ -203,6 +209,8 @@ def cmd_judge(campaign: CampaignConfig, dry_run: bool) -> None:
 
 def cmd_baseline(campaign: CampaignConfig, dry_run: bool) -> None:
     """Submit a baseline request (no code changes) and optionally poll."""
+    if not dry_run:
+        check_git_clean()
     source_path = _source_path(campaign)
     req = _req_dir(campaign)
     commit = git_submodule_head(source_path)
@@ -240,6 +248,8 @@ def cmd_baseline(campaign: CampaignConfig, dry_run: bool) -> None:
 
 def cmd_finale(campaign: CampaignConfig, dry_run: bool) -> None:
     """Submit a finale request (modified source, no profiling) and poll."""
+    if not dry_run:
+        check_git_clean()
     source_path = _source_path(campaign)
     req = _req_dir(campaign)
 
@@ -289,6 +299,8 @@ def cmd_finale(campaign: CampaignConfig, dry_run: bool) -> None:
 
 def cmd_revert(campaign: CampaignConfig, dry_run: bool) -> None:
     """Revert the last DPDK submodule commit and force-push the fork."""
+    if not dry_run:
+        check_git_clean()
     source_path = _source_path(campaign)
     branch = _optimization_branch(campaign)
 

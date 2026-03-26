@@ -14,6 +14,36 @@ logger = logging.getLogger(__name__)
 GIT_TIMEOUT = 60
 
 
+class DirtyWorkingTreeError(RuntimeError):
+    """Raised when a git operation requires a clean working tree."""
+
+
+def check_git_clean() -> None:
+    """Verify the working tree has no unstaged or untracked changes.
+
+    Raises DirtyWorkingTreeError with an actionable message if dirty.
+    """
+    result = subprocess.run(
+        ["git", "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        timeout=GIT_TIMEOUT,
+    )
+    dirty = [
+        line
+        for line in result.stdout.splitlines()
+        if line.strip() and not line.startswith("?? .claude/")
+    ]
+    if dirty:
+        files = "\n  ".join(dirty)
+        msg = (
+            f"Working tree is dirty — git push/pull will fail.\n"
+            f"  {files}\n"
+            f"Fix: commit or stash these changes, then retry."
+        )
+        raise DirtyWorkingTreeError(msg)
+
+
 def git_submodule_head(source_path: Path) -> str:
     """Return the current HEAD commit SHA of the DPDK submodule."""
     result = subprocess.run(
