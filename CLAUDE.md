@@ -132,7 +132,7 @@ projects/dpdk/sprints/2026-03-23-memif-ppc64le/
   docs/             # summary, graphs
 ```
 
-The active sprint is set in `.autoforge.toml` at the repo root. Use `uv run autoforge sprint init <name>` to create a new sprint (copies from `config/campaign.toml.example` or `--from <sprint>`). Sprint names must match `YYYY-MM-DD-slug` format.
+The active sprint is set in `.autoforge.toml` at the repo root. Use `uv run autoforge sprint init <name>` to create a new sprint (copies from `config/campaign.toml.example` or `--from <sprint>`, and stamps a per-sprint `optimization_branch` into the new `campaign.toml`). Sprint names must match `YYYY-MM-DD-slug` format.
 
 Never commit test or scratch request files — they will pollute the real results history. Tests should use `tmp_path` fixtures, not sprint directories.
 

@@ -14,6 +14,7 @@ from autoforge.pointer import REPO_ROOT, load_pointer, save_pointer
 logger = logging.getLogger(__name__)
 
 SPRINT_NAME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-[a-z0-9][a-z0-9-]*$")
+OPT_BRANCH_RE = re.compile(r"^autoforge/\d{4}-\d{2}-\d{2}-[a-z0-9][a-z0-9-]*$")
 
 RESULTS_COLUMNS = [
     "sequence",
@@ -40,6 +41,18 @@ def _sprints_root_from_pointer() -> tuple[Path, str]:
     """Load pointer and return (sprints_root, project_name)."""
     pointer = load_pointer()
     return _sprints_root(pointer["project"]), pointer["project"]
+
+
+def sprint_branch_name(sprint_name: str) -> str:
+    """Return the canonical optimization branch name for a sprint.
+
+    Args:
+        sprint_name: A valid sprint name (YYYY-MM-DD-slug).
+
+    Returns:
+        Branch name of the form ``autoforge/{sprint_name}``.
+    """
+    return f"autoforge/{sprint_name}"
 
 
 def validate_sprint_name(name: str) -> None:
@@ -142,6 +155,23 @@ def init_sprint(
             raise FileNotFoundError(msg)
 
     shutil.copy2(source, sdir / "campaign.toml")
+
+    # Stamp the per-sprint optimization branch name into campaign.toml
+    branch = sprint_branch_name(name)
+    campaign_path = sdir / "campaign.toml"
+    text = campaign_path.read_text()
+    # NOTE: Regex is section-unaware; assumes optimization_branch appears exactly
+    # once per file, which holds for all current templates. Output is always
+    # double-quoted (normalizing any single-quoted source value).
+    new_text, count = re.subn(
+        r'^(optimization_branch\s*=\s*)(?:"[^"]*"|\'[^\']*\')',
+        rf'\1"{branch}"',
+        text,
+        flags=re.MULTILINE,
+    )
+    if count == 0:
+        new_text = text.rstrip("\n") + f'\noptimization_branch = "{branch}"\n'
+    campaign_path.write_text(new_text)
 
     # Empty results.tsv with header
     with open(sdir / "results.tsv", "w", newline="") as f:

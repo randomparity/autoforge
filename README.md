@@ -1,6 +1,6 @@
 # Autoforge
 
-Iterative erformance optimization through automated build-test cycles on
+Iterative performance optimization through automated build-test cycles on
 real hardware.
 
 ## How it works
@@ -28,8 +28,8 @@ Agent                              Runner
 Prerequisites: Python 3.13+, [uv](https://docs.astral.sh/uv/), git.
 
 ```bash
-git clone --recurse-submodules <repo-url>
-cd autosearch-dpdk
+git clone --recurse-submodules <repo-url> autoforge
+cd autoforge
 uv sync
 uv run autoforge context             # show current optimization state
 uv run autoforge-loop --dry-run      # interactive mode (no git push)

@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from autoforge.agent.loop import run_baseline
 from autoforge.agent.metric import below_threshold
 
@@ -45,7 +47,7 @@ SAMPLE_CAMPAIGN = {
         "deploy": "local",
         "test": "testpmd-memif",
         "submodule_path": "dpdk",
-        "optimization_branch": "autosearch/optimize",
+        "optimization_branch": "autoforge/optimize",
     },
     "sprint": {"name": "2026-01-01-test"},
 }
@@ -122,3 +124,39 @@ class TestRunBaseline:
         staged_paths = mock_git.call_args[0][0]
         assert len(staged_paths) == 1
         assert "dpdk" not in staged_paths[0]
+
+
+class TestLoopMissingBranch:
+    def test_empty_branch_raises_system_exit(self) -> None:
+        campaign_empty_branch = {
+            **SAMPLE_CAMPAIGN,
+            "project": {**SAMPLE_CAMPAIGN["project"], "optimization_branch": ""},
+        }
+        with (
+            patch("autoforge.agent.loop.load_campaign", return_value=campaign_empty_branch),
+            patch("autoforge.agent.loop.resolve_campaign_path"),
+            patch("autoforge.agent.loop.setup_logging"),
+            patch("sys.argv", ["loop"]),
+            pytest.raises(SystemExit, match="optimization_branch"),
+        ):
+            from autoforge.agent.loop import main as loop_main
+
+            loop_main()
+
+    def test_missing_branch_raises_system_exit(self) -> None:
+        campaign_no_branch = {
+            **SAMPLE_CAMPAIGN,
+            "project": {
+                k: v for k, v in SAMPLE_CAMPAIGN["project"].items() if k != "optimization_branch"
+            },
+        }
+        with (
+            patch("autoforge.agent.loop.load_campaign", return_value=campaign_no_branch),
+            patch("autoforge.agent.loop.resolve_campaign_path"),
+            patch("autoforge.agent.loop.setup_logging"),
+            patch("sys.argv", ["loop"]),
+            pytest.raises(SystemExit, match="optimization_branch"),
+        ):
+            from autoforge.agent.loop import main as loop_main
+
+            loop_main()

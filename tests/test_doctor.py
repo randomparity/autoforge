@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from autoforge.agent.doctor import (
     check_campaign,
+    check_optimization_branch,
     check_plugins,
     check_pointer,
     check_runner,
@@ -62,6 +64,7 @@ def _build_config_tree(
             'build = "local"\ndeploy = "local"\n'
             'test = "testpmd-memif"\n'
             f'submodule_path = "projects/{project}/repo"\n'
+            f'optimization_branch = "autoforge/2026-01-01-test"\n'
             'scope = ["src/"]\n',
         )
         # Create the submodule path
@@ -385,3 +388,61 @@ class TestRunDoctor:
         output = format_effective_config(effective)
         assert "project: testproj" in output
         assert "build: local" in output
+
+
+class TestCheckOptimizationBranch:
+    def test_missing_branch_is_fail(self, tmp_path: Path) -> None:
+        results = check_optimization_branch("proj", "2026-01-01-test", {}, tmp_path)
+        assert any(r.name == "campaign.optimization_branch" and r.status == "fail" for r in results)
+
+    def test_canonical_branch_passes(self, tmp_path: Path) -> None:
+        data = {"project": {"optimization_branch": "autoforge/2026-01-01-test"}}
+        results = check_optimization_branch("proj", "2026-01-01-test", data, tmp_path)
+        branch_check = next(r for r in results if r.name == "campaign.optimization_branch")
+        assert branch_check.status == "pass"
+
+    def test_noncanonical_branch_warns(self, tmp_path: Path) -> None:
+        data = {"project": {"optimization_branch": "my/custom/branch"}}
+        results = check_optimization_branch("proj", "2026-01-01-test", data, tmp_path)
+        branch_check = next(r for r in results if r.name == "campaign.optimization_branch")
+        assert branch_check.status == "warn"
+
+    def test_branch_absent_from_submodule_warns(self, tmp_path: Path) -> None:
+        sub = tmp_path / "projects" / "proj" / "repo"
+        sub.mkdir(parents=True)
+        (sub / ".git").write_text("")
+        data = {
+            "project": {
+                "optimization_branch": "autoforge/2026-01-01-test",
+                "submodule_path": "projects/proj/repo",
+            }
+        }
+        with patch("autoforge.agent.doctor.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = ""  # branch not listed
+            results = check_optimization_branch("proj", "2026-01-01-test", data, tmp_path)
+        exists_check = next(
+            (r for r in results if r.name == "campaign.optimization_branch_exists"), None
+        )
+        assert exists_check is not None
+        assert exists_check.status == "warn"
+
+    def test_branch_present_in_submodule_passes(self, tmp_path: Path) -> None:
+        sub = tmp_path / "projects" / "proj" / "repo"
+        sub.mkdir(parents=True)
+        (sub / ".git").write_text("")
+        data = {
+            "project": {
+                "optimization_branch": "autoforge/2026-01-01-test",
+                "submodule_path": "projects/proj/repo",
+            }
+        }
+        with patch("autoforge.agent.doctor.subprocess.run") as mock_run:
+            mock_run.return_value.returncode = 0
+            mock_run.return_value.stdout = "  autoforge/2026-01-01-test\n"
+            results = check_optimization_branch("proj", "2026-01-01-test", data, tmp_path)
+        exists_check = next(
+            (r for r in results if r.name == "campaign.optimization_branch_exists"), None
+        )
+        assert exists_check is not None
+        assert exists_check.status == "pass"

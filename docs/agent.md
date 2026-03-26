@@ -21,8 +21,8 @@ submits them for testing, and iterates based on results.
 ## Installation
 
 ```bash
-git clone --recurse-submodules <repo-url>
-cd autosearch-dpdk
+git clone --recurse-submodules <repo-url> autoforge
+cd autoforge
 make setup-agent
 ```
 
@@ -51,9 +51,10 @@ Campaign settings are per-sprint at
 | `[project]` | `test` | Test plugin name (e.g. `"testpmd-memif"`) |
 | `[project]` | `profiler` | Profiler plugin name (e.g. `"perf-record"`) |
 | `[project]` | `submodule_path` | Path to the DPDK submodule |
-| `[project]` | `optimization_branch` | Branch for good changes (empty = skip branch push; `campaign.toml.example` sets `"autosearch/optimize"`) |
+| `[project]` | `optimization_branch` | Branch for good changes (empty = skip branch push; set automatically by `sprint init` to `autoforge/{sprint-name}`) |
 | `[project]` | `scope` | Source paths the agent may modify (relative to submodule) |
 | `[profiling]` | `enabled` | Include profiling summary in results (default: `false`) |
+| `[platform]` | `arch` | Target architecture for `autoforge hints` (e.g. `"ppc64le"`, `"x86_64"`). Required unless `--arch` is passed. |
 
 ## Interactive mode
 
@@ -106,7 +107,7 @@ Global flags (before the subcommand):
 | Flag | Description |
 |------|-------------|
 | `--campaign <path>` | Path to campaign TOML (overrides `.autoforge.toml` pointer) |
-| `--dry-run` | Skip git push (local testing only) |
+| `--dry-run` | Skip git push — applies to `submit`, `judge`, `baseline`, `finale`, `revert` |
 
 For interactive manual iteration: `uv run autoforge-loop [--dry-run]`
 
@@ -137,9 +138,13 @@ Request JSON files in `sprints/<name>/requests/` follow the naming pattern
 
 ## Optimization branch
 
-On startup, the agent creates an `autosearch/optimize` branch in the DPDK
-submodule (configurable via `[project].optimization_branch`). All proposed
-changes are committed to this branch.
+The agent commits all proposed changes to the branch named in
+`[project].optimization_branch`, stamped automatically by `autoforge sprint init`
+as `autoforge/{sprint-name}` (e.g. `autoforge/2026-04-01-my-sprint`). The branch
+is created in the submodule on the first `submit` or `autoforge-loop` run.
+
+Run `autoforge doctor --role agent` to verify the branch is configured and exists
+in the submodule.
 
 After each measurement:
 

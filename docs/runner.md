@@ -9,15 +9,15 @@ results back via git.
 - Python 3.13+
 - [uv](https://docs.astral.sh/uv/)
 - DPDK build dependencies: meson, ninja, gcc (or clang), pkg-config
-- Git access to the autosearch-dpdk repository (push permissions)
+- Git access to the autoforge repository (push permissions)
 - For testpmd plugin: NIC ports connected back-to-back (or memif vdevs)
 - For DTS plugin: DTS installed with a two-node topology (SUT + TG)
 
 ## Installation
 
 ```bash
-git clone --recurse-submodules <repo-url>
-cd autosearch-dpdk
+git clone --recurse-submodules <repo-url> autoforge
+cd autoforge
 make setup-runner
 ```
 
@@ -25,6 +25,8 @@ make setup-runner
 checks for runner prerequisites (meson, ninja, compiler, pkg-config).
 
 ## Runner configuration
+
+Run `uv run autoforge doctor --role runner` to validate your setup before starting the service.
 
 Configuration is split into framework config and per-plugin config:
 
@@ -161,7 +163,7 @@ into where CPU cycles are spent.
 - Kernel support for hardware performance counters
 - If `profiling.sudo = true`: passwordless sudo for `perf` (same pattern as testpmd above)
 
-**Enable in `projects/dpdk/runner.toml`:**
+**Enable in `projects/dpdk/perfs/perf-record.toml`** (copy from `perf-record.toml.example`):
 
 ```toml
 [profiling]
@@ -272,7 +274,7 @@ last lines of build output. Common causes: missing dependencies, incompatible
 compiler version, or meson configuration errors.
 
 **Test failures**
-For testpmd: check that PCI addresses and lcores are correct in `projects/dpdk/runner.toml`.
+For testpmd: check that PCI addresses and lcores are correct in `projects/dpdk/tests/testpmd-memif.toml`.
 For DTS: check the DTS output directory for full test logs. The request JSON
 `error` field contains the failure reason.
 

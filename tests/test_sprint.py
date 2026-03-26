@@ -11,6 +11,7 @@ import pytest
 from autoforge.agent.sprint import (
     init_sprint,
     list_sprints,
+    sprint_branch_name,
     switch_sprint,
     validate_sprint_name,
 )
@@ -113,6 +114,60 @@ class TestInitSprint:
 
         content = (sdir / "campaign.toml").read_text()
         assert 'name = "cloned"' in content
+
+
+class TestSprintBranchName:
+    def test_derives_branch_from_name(self) -> None:
+        assert sprint_branch_name("2026-03-25-memif-zc") == "autoforge/2026-03-25-memif-zc"
+
+    def test_preserves_full_slug(self) -> None:
+        assert sprint_branch_name("2026-01-01-a") == "autoforge/2026-01-01-a"
+
+
+class TestInitSprintBranchStamping:
+    def test_branch_stamped_from_template(self, tmp_path: Path) -> None:
+        template = tmp_path / "campaign.toml.example"
+        template.write_text(
+            '[campaign]\nname = "test"\n'
+            '[project]\noptimization_branch = "autoforge/YYYY-MM-DD-slug"\n'
+        )
+        sprints_dir = tmp_path / "sprints"
+
+        p1, p2, p3 = _patch_pointer(sprints_dir)
+        with p1, p2, p3:
+            sdir = init_sprint("2026-03-25-new-sprint", template=template)
+
+        content = (sdir / "campaign.toml").read_text()
+        assert 'optimization_branch = "autoforge/2026-03-25-new-sprint"' in content
+
+    def test_branch_overrides_from_sprint(self, tmp_path: Path) -> None:
+        sprints_dir = tmp_path / "sprints"
+        source = sprints_dir / "2026-03-24-source"
+        source.mkdir(parents=True)
+        (source / "campaign.toml").write_text(
+            '[campaign]\nname = "cloned"\n'
+            '[project]\noptimization_branch = "autoforge/2026-03-24-source"\n'
+        )
+
+        p1, p2, p3 = _patch_pointer(sprints_dir)
+        with p1, p2, p3:
+            sdir = init_sprint("2026-03-25-new-sprint", from_sprint="2026-03-24-source")
+
+        content = (sdir / "campaign.toml").read_text()
+        assert 'optimization_branch = "autoforge/2026-03-25-new-sprint"' in content
+        assert "2026-03-24-source" not in content
+
+    def test_branch_appended_when_not_in_template(self, tmp_path: Path) -> None:
+        template = tmp_path / "campaign.toml.example"
+        template.write_text('[campaign]\nname = "test"\n')
+        sprints_dir = tmp_path / "sprints"
+
+        p1, p2, p3 = _patch_pointer(sprints_dir)
+        with p1, p2, p3:
+            sdir = init_sprint("2026-03-25-no-branch", template=template)
+
+        content = (sdir / "campaign.toml").read_text()
+        assert 'optimization_branch = "autoforge/2026-03-25-no-branch"' in content
 
 
 class TestListSprints:
