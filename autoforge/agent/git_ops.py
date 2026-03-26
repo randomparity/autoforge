@@ -87,6 +87,25 @@ def git_add_commit_push(
         )
 
 
+def push_submodule(source_path: Path, branch: str) -> None:
+    """Push the submodule's optimization branch to its remote.
+
+    Uses a regular push (not force). Force-push is only used during reverts.
+
+    Args:
+        source_path: Path to the submodule directory.
+        branch: Branch name to push.
+    """
+    subprocess.run(
+        ["git", "-C", str(source_path), "push", "origin", branch],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=GIT_TIMEOUT,
+    )
+    logger.info("Pushed %s to origin in %s", branch, source_path)
+
+
 def ensure_optimization_branch(source_path: Path, branch: str) -> None:
     """Create and check out the optimization branch if it doesn't exist."""
     result = subprocess.run(

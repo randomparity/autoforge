@@ -13,6 +13,7 @@ uv run ruff check autoforge/ autoforge_dpdk/ tests/    # lint
 uv run ruff format autoforge/ autoforge_dpdk/ tests/   # format
 uv run autoforge context                               # show optimization state
 uv run autoforge submit -d "description"               # submit change for testing
+uv run autoforge submit -d "desc" -t "memcpy,cache"   # submit with experiment tags
 uv run autoforge poll                                  # wait for runner result
 uv run autoforge judge                                 # keep or revert based on metric
 uv run autoforge baseline                              # submit baseline (no changes)
@@ -27,6 +28,7 @@ uv run autoforge sprint list                              # list all sprints
 uv run autoforge sprint switch <name>                    # switch active sprint
 uv run autoforge doctor                                  # validate configuration setup
 uv run autoforge doctor --role agent                     # agent-side checks only
+uv run autoforge summarize                               # generate sprint summary from results
 uv run autoforge-loop --dry-run                         # interactive mode (manual fallback)
 ```
 

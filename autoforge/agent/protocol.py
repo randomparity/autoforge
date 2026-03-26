@@ -38,6 +38,7 @@ def create_request(
     requests_dir: Path,
     *,
     skip_profiling: bool = False,
+    tags: list[str] | None = None,
 ) -> Path:
     """Create a new pending test request file.
 
@@ -68,6 +69,7 @@ def create_request(
         deploy_plugin=project.get("deploy", ""),
         test_plugin=project.get("test", ""),
         profile_plugin=profiler,
+        tags=tags,
         metric_name=metric.get("name", ""),
         metric_path=metric.get("path", ""),
     )

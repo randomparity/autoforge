@@ -405,6 +405,38 @@ The existing `perf-record` profiler in `projects/dpdk/perfs/` uses
 platforms or tools (e.g., DTrace, Instruments), implement the same interface
 with your profiling tool.
 
+### Profiler troubleshooting
+
+If `profiling.enabled = true` in your campaign config but no profiling data
+appears in results, check these common issues on the runner machine:
+
+1. **perf not installed.** The `perf` binary must be available. On RHEL/CentOS:
+   `yum install perf`. On Ubuntu: `apt install linux-tools-$(uname -r)`.
+
+2. **Insufficient permissions.** Check the kernel paranoid level:
+
+   ```bash
+   cat /proc/sys/kernel/perf_event_paranoid
+   ```
+
+   Must be `<= 1` for non-root profiling. Set it with:
+
+   ```bash
+   sudo sysctl kernel.perf_event_paranoid=1
+   ```
+
+3. **Verify perf works.** Run a quick test:
+
+   ```bash
+   perf stat -a sleep 1
+   ```
+
+   If this fails, profiling will silently return empty results.
+
+4. **Profile plugin not set.** Ensure `[project] profiler = "perf-record"` is
+   in your campaign.toml. An empty profiler field skips profiling even when
+   `profiling.enabled = true`.
+
 ## Configuration
 
 ### Framework config: `projects/<project>/runner.toml`

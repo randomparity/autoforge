@@ -104,6 +104,29 @@ class TestSerialization:
         assert req2.profile_plugin == "perf-record"
 
 
+class TestTags:
+    def test_tags_default_none(self) -> None:
+        req = make_request()
+        assert req.tags is None
+
+    def test_tags_round_trip(self) -> None:
+        req = make_request(tags=["memcpy", "cache"])
+        restored = TestRequest.from_json(req.to_json())
+        assert restored.tags == ["memcpy", "cache"]
+
+    def test_tags_empty_list(self) -> None:
+        req = make_request(tags=[])
+        restored = TestRequest.from_json(req.to_json())
+        assert restored.tags == []
+
+    def test_tags_in_json_output(self) -> None:
+        import json
+
+        req = make_request(tags=["batching"])
+        parsed = json.loads(req.to_json())
+        assert parsed["tags"] == ["batching"]
+
+
 class TestFilename:
     def test_filename_format(self) -> None:
         req = make_request(sequence=1, created_at="2025-01-15T10:30:00")
