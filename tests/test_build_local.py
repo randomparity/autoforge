@@ -23,11 +23,11 @@ def _load_module():
 
 
 _mod = _load_module()
-LocalServerBuilder = _mod.LocalServerBuilder
+LocalBuilder = _mod.LocalBuilder
 
 
-def _make_builder(build_config: dict | None = None) -> _mod.LocalServerBuilder:
-    b = LocalServerBuilder()
+def _make_builder(build_config: dict | None = None) -> _mod.LocalBuilder:
+    b = LocalBuilder()
     b.configure({}, {"build": build_config or {}})
     return b
 
@@ -42,17 +42,17 @@ def _fail(stderr: str = "error") -> subprocess.CompletedProcess:
 
 class TestConfigure:
     def test_stores_build_config(self) -> None:
-        b = LocalServerBuilder()
+        b = LocalBuilder()
         b.configure({}, {"build": {"jobs": 4, "cross_file": "/tmp/cross.txt"}})
         assert b._build_config == {"jobs": 4, "cross_file": "/tmp/cross.txt"}
 
     def test_missing_build_section_defaults_empty(self) -> None:
-        b = LocalServerBuilder()
+        b = LocalBuilder()
         b.configure({}, {})
         assert b._build_config == {}
 
     def test_conforms_to_builder_protocol(self) -> None:
-        assert isinstance(LocalServerBuilder(), Builder)
+        assert isinstance(LocalBuilder(), Builder)
 
 
 class TestBuildSuccess:

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from autoforge.campaign import CampaignConfig
 from autoforge.plugins.protocols import (
     Builder,
     Deployer,
@@ -50,7 +51,6 @@ class PipelineComponents:
 
 
 def _projects_root() -> Path:
-    """Return the projects root directory. Allows override for testing."""
     return PROJECTS_ROOT
 
 
@@ -229,7 +229,7 @@ def list_components(
 
 def load_pipeline(
     project: str,
-    campaign: dict[str, Any],
+    campaign: CampaignConfig,
     root: Path | None = None,
 ) -> PipelineComponents:
     """Load all components specified in a campaign config.

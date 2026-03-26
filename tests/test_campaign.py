@@ -7,12 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from autoforge.campaign import (
-    load_campaign,
-    load_pointer,
-    resolve_campaign_path,
-    save_pointer,
-)
+from autoforge.campaign import load_campaign, resolve_campaign_path
+from autoforge.pointer import load_pointer, save_pointer
 
 
 class TestLoadPointer:

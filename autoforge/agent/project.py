@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from autoforge.campaign import REPO_ROOT, save_pointer
+from autoforge.pointer import REPO_ROOT, save_pointer
 
 PROJECT_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 PROJECT_SUBDIRS = ("builds", "deploys", "tests", "perfs", "sprints")

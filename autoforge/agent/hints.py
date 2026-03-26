@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from autoforge.campaign import CampaignConfig
@@ -100,7 +100,7 @@ _CACHE_LINE_SIZES: dict[str, int] = {
 }
 
 
-def workload_hints(arch: str, profile_summary: dict) -> str:
+def workload_hints(arch: str, profile_summary: dict[str, Any]) -> str:
     """Generate workload-specific optimization suggestions from profiling data.
 
     Args:

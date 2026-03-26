@@ -8,12 +8,12 @@ import time
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
-from autoforge.campaign import CampaignConfig
+from autoforge.campaign import GIT_TIMEOUT, CampaignConfig
 from autoforge.plugins.loader import load_component
 from autoforge.plugins.protocols import BuildResult, DeployResult
 from autoforge.protocol import (
-    GIT_TIMEOUT,
     STATUS_BUILDING,
     STATUS_BUILT,
     STATUS_CLAIMED,
@@ -33,6 +33,11 @@ from autoforge.runner.protocol import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _project_name(campaign: CampaignConfig) -> str:
+    """Extract the project name from a campaign config."""
+    return campaign.get("project", {}).get("name", "dpdk")
 
 
 def git_pull() -> bool:
@@ -74,11 +79,11 @@ def _run_build(
     request: TestRequest,
     request_path: Path,
     campaign: CampaignConfig,
-    config: dict,
+    config: dict[str, Any],
 ) -> BuildResult | None:
     """Execute the build phase. Returns BuildResult on success, None on failure."""
     project_config = campaign.get("project", {})
-    project_name = project_config.get("name", "dpdk")
+    project_name = _project_name(campaign)
     paths = config.get("paths", {})
     timeouts = config.get("timeouts", {})
     source_path = Path(paths.get("dpdk_src", "/opt/dpdk"))
@@ -108,12 +113,12 @@ def _run_deploy(
     request: TestRequest,
     request_path: Path,
     campaign: CampaignConfig,
-    config: dict,
+    config: dict[str, Any],
     build_result: BuildResult,
 ) -> DeployResult | None:
     """Execute the deploy phase. Returns DeployResult on success, None on failure."""
     project_config = campaign.get("project", {})
-    project_name = project_config.get("name", "dpdk")
+    project_name = _project_name(campaign)
 
     deployer = load_component(
         project_name,
@@ -138,12 +143,12 @@ def _run_test(
     request: TestRequest,
     request_path: Path,
     campaign: CampaignConfig,
-    config: dict,
+    config: dict[str, Any],
     deploy_result: DeployResult,
 ) -> None:
     """Execute the test phase and update request to completed/failed."""
     project_config = campaign.get("project", {})
-    project_name = project_config.get("name", "dpdk")
+    project_name = _project_name(campaign)
     timeouts = config.get("timeouts", {})
     test_timeout = int(timeouts.get("test_minutes", 10)) * 60
 
@@ -181,8 +186,8 @@ class PhaseRunner(ABC):
 
     def __init__(
         self,
-        config: dict,
-        campaign: dict,
+        config: dict[str, Any],
+        campaign: CampaignConfig,
         requests_dir: Path,
     ) -> None:
         self.config = config

@@ -2,21 +2,16 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
+
+from autoforge.campaign import Direction
 
 if TYPE_CHECKING:
     from autoforge.campaign import CampaignConfig
 
-Direction = Literal["maximize", "minimize"]
-
 
 def compare_metric(current: float, best: float, direction: Direction) -> bool:
     """Return True if current is strictly better than best.
-
-    Args:
-        current: The metric value from the latest iteration.
-        best: The best metric value seen so far.
-        direction: Either 'maximize' or 'minimize'.
 
     Raises:
         ValueError: If direction is not 'maximize' or 'minimize'.

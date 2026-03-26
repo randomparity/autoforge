@@ -25,7 +25,7 @@ from autoforge.plugins.loader import (
 BUILDER_SOURCE = """\
 from autoforge.plugins.protocols import BuildResult
 
-class LocalServerBuilder:
+class LocalBuilder:
     name = "local"
 
     def configure(self, project_config, runner_config):
@@ -156,7 +156,7 @@ class TestListComponents:
         base = tmp_path / "testproj" / "builds"
         (base / "remote-server.py").write_text(
             BUILDER_SOURCE.replace("local", "remote-server").replace(
-                "LocalServerBuilder", "RemoteServerBuilder"
+                "LocalBuilder", "RemoteServerBuilder"
             )
         )
         names = list_components("testproj", "build", root=tmp_path)

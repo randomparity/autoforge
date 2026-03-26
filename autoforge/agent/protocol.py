@@ -8,8 +8,8 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-from autoforge.campaign import CampaignConfig
-from autoforge.protocol import GIT_TIMEOUT, TestRequest
+from autoforge.campaign import GIT_TIMEOUT, CampaignConfig
+from autoforge.protocol import TestRequest
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +100,6 @@ def find_latest_request(requests_dir: Path) -> TestRequest | None:
             return TestRequest.read(path)
         except (ValueError, KeyError, TypeError) as exc:
             logger.warning("Skipping malformed request %s: %s", path.name, exc)
-            continue
 
     return None
 

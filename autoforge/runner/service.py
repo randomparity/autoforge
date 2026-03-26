@@ -5,9 +5,11 @@ from __future__ import annotations
 import logging
 import os
 import tomllib
+from typing import Any
 
-from autoforge.campaign import REPO_ROOT, load_campaign, load_pointer, resolve_campaign_path
+from autoforge.campaign import load_campaign, resolve_campaign_path
 from autoforge.logging_config import setup_logging
+from autoforge.pointer import REPO_ROOT, load_pointer
 from autoforge.runner.base import (
     BuildRunner,
     DeployRunner,
@@ -36,7 +38,7 @@ def resolve_config_path(explicit: str | None = None) -> str:
     return str(REPO_ROOT / "projects" / pointer["project"] / "runner.toml")
 
 
-def load_config(path: str | None = None) -> dict:
+def load_config(path: str | None = None) -> dict[str, Any]:
     """Load runner configuration from a TOML file.
 
     Raises:

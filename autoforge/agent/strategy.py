@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import subprocess
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from autoforge.agent.hints import resolve_arch
+from autoforge.agent.hints import resolve_arch, workload_hints
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -19,10 +18,10 @@ logger = logging.getLogger(__name__)
 
 
 def format_context(
-    history: list[dict],
+    history: list[dict[str, str]],
     campaign: CampaignConfig,
     *,
-    profile_summary: dict | None = None,
+    profile_summary: dict[str, Any] | None = None,
 ) -> str:
     """Build a prompt-friendly summary of campaign state and history.
 
@@ -76,8 +75,6 @@ def format_context(
 
     arch = resolve_arch(campaign)
     if arch and profile_summary:
-        from autoforge.agent.hints import workload_hints
-
         wh = workload_hints(arch, profile_summary)
         if wh:
             lines.append("")
@@ -90,7 +87,7 @@ def format_context(
     return "\n".join(lines)
 
 
-def _scored_rows(history: list[dict]) -> list[tuple[float, dict]]:
+def _scored_rows(history: list[dict[str, str]]) -> list[tuple[float, dict[str, str]]]:
     """Extract rows with valid numeric metric values."""
     scored = []
     for row in history:
@@ -103,7 +100,7 @@ def _scored_rows(history: list[dict]) -> list[tuple[float, dict]]:
     return scored
 
 
-def format_profile_lines(summary: dict) -> list[str]:
+def format_profile_lines(summary: dict[str, Any]) -> list[str]:
     """Format profiling data for prompt context.
 
     Args:
@@ -134,7 +131,7 @@ def format_profile_lines(summary: dict) -> list[str]:
     return lines
 
 
-def extract_profile_summary(result: TestRequest) -> dict | None:
+def extract_profile_summary(result: TestRequest) -> dict[str, Any] | None:
     """Extract profiling summary from a completed test result.
 
     Args:
@@ -146,16 +143,10 @@ def extract_profile_summary(result: TestRequest) -> dict | None:
     raw = result.results_json
     if raw is None:
         return None
-    if isinstance(raw, str):
-        try:
-            data = json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
-            return None
-    elif isinstance(raw, dict):
-        data = raw
-    else:
+    if not isinstance(raw, dict):
+        logger.debug("results_json is not a dict, got %s", type(raw).__name__)
         return None
-    return data.get("profiling")
+    return raw.get("profiling")
 
 
 def validate_change(source_path: Path) -> bool:
@@ -174,6 +165,13 @@ def validate_change(source_path: Path) -> bool:
         text=True,
         timeout=30,
     )
+    if outer_diff.returncode != 0:
+        raise subprocess.CalledProcessError(
+            outer_diff.returncode,
+            outer_diff.args,
+            outer_diff.stdout,
+            outer_diff.stderr,
+        )
     has_change = bool(outer_diff.stdout.strip())
     if not has_change:
         logger.warning("No submodule pointer change detected in %s", source_path)

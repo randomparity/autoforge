@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from autoforge.perf.arch import COMMON_EVENTS, detect_arch, load_arch_profile
-from autoforge.perf.profile import ProfileResult, fold_stacks, parse_perf_stat, write_folded
+from autoforge.perf.profile import PerfCaptureResult, fold_stacks, parse_perf_stat, write_folded
 
 # -- Realistic perf script output for testing --
 
@@ -158,16 +158,16 @@ class TestLoadArchProfile:
         assert profile["heuristics"] == []
 
 
-class TestProfileResult:
+class TestPerfCaptureResult:
     def test_defaults(self):
-        result = ProfileResult(success=True)
+        result = PerfCaptureResult(success=True)
         assert result.folded_stacks == {}
         assert result.counters == {}
         assert result.error is None
         assert result.duration_seconds == 0.0
 
     def test_with_data(self):
-        result = ProfileResult(
+        result = PerfCaptureResult(
             success=True,
             folded_stacks={"a;b": 5},
             counters={"cycles": 1000.0},

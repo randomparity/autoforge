@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from autoforge.agent.history import load_failures, load_history
 from autoforge.agent.protocol import find_request_by_seq
 from autoforge.agent.sprint import failures_path, requests_dir, results_path
-from autoforge.campaign import REPO_ROOT
+from autoforge.pointer import REPO_ROOT
 
 if TYPE_CHECKING:
     from autoforge.campaign import CampaignConfig
@@ -181,7 +181,7 @@ def _load_summary_data(campaign: CampaignConfig) -> dict[str, Any]:
 
 
 def _scored_rows(
-    history: list[dict],
+    history: list[dict[str, str]],
     direction: str,
 ) -> list[dict[str, Any]]:
     """Extract rows with valid metrics, sorted by best first."""
@@ -206,7 +206,7 @@ def _scored_rows(
     return rows
 
 
-def _first_completed(history: list[dict]) -> dict[str, Any] | None:
+def _first_completed(history: list[dict[str, str]]) -> dict[str, Any] | None:
     """Find the first completed result (baseline)."""
     for row in history:
         if row.get("status") == "completed" and row.get("metric_value"):
@@ -221,8 +221,8 @@ def _first_completed(history: list[dict]) -> dict[str, Any] | None:
 
 
 def _build_accepted_table(
-    history: list[dict],
-    baseline: dict | None,
+    history: list[dict[str, str]],
+    baseline: dict[str, Any] | None,
     direction: str,
 ) -> str:
     """Build markdown table of accepted (improving) results."""
@@ -260,7 +260,7 @@ def _build_accepted_table(
     return "\n".join(lines)
 
 
-def _build_rejected_table(failures: list[dict]) -> str:
+def _build_rejected_table(failures: list[dict[str, str]]) -> str:
     """Build markdown table of rejected experiments."""
     if not failures:
         return "No rejected experiments."
@@ -277,7 +277,7 @@ def _build_rejected_table(failures: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _build_failures_table(history: list[dict], req_dir: Path) -> str:
+def _build_failures_table(history: list[dict[str, str]], req_dir: Path) -> str:
     """Build markdown table of build/test failures."""
     failed = [r for r in history if r.get("status") == "failed"]
     if not failed:
@@ -295,13 +295,13 @@ def _build_failures_table(history: list[dict], req_dir: Path) -> str:
             req = find_request_by_seq(int(seq), req_dir)
             if req and req.error:
                 error = req.error[:80]
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as exc:
+            logger.debug("Could not load request %s: %s", seq, exc)
         lines.append(f"| {seq} | {desc} | {error} |")
     return "\n".join(lines)
 
 
-def _build_tags_summary(history: list[dict]) -> str:
+def _build_tags_summary(history: list[dict[str, str]]) -> str:
     """Build a summary of experiment tags."""
     tag_counts: dict[str, int] = {}
     for row in history:
@@ -318,8 +318,8 @@ def _build_tags_summary(history: list[dict]) -> str:
 
 
 def _build_patch_prompts(
-    history: list[dict],
-    baseline: dict | None,
+    history: list[dict[str, str]],
+    baseline: dict[str, Any] | None,
     direction: str,
 ) -> str:
     """Generate placeholder prompts for each accepted patch."""

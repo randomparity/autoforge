@@ -99,7 +99,7 @@ class TestRecordResultOrRevertWithBranch:
 
         with (
             patch("autoforge.agent.git_ops.compare_metric", return_value=False),
-            patch("autoforge.agent.git_ops.get_diff_summary", return_value="1 file changed"),
+            patch("autoforge.agent.git_ops.capture_diff_summary", return_value="1 file changed"),
             patch("autoforge.agent.git_ops.revert_last_change"),
             patch("autoforge.agent.git_ops.force_push_source") as mock_push,
             patch("autoforge.agent.git_ops.git_add_commit_push"),
@@ -132,7 +132,7 @@ class TestRecordResultOrRevertWithBranch:
 
         with (
             patch("autoforge.agent.git_ops.compare_metric", return_value=False),
-            patch("autoforge.agent.git_ops.get_diff_summary", return_value="1 file changed"),
+            patch("autoforge.agent.git_ops.capture_diff_summary", return_value="1 file changed"),
             patch("autoforge.agent.git_ops.revert_last_change"),
             patch("autoforge.agent.git_ops.force_push_source") as mock_push,
             patch("autoforge.agent.git_ops.git_add_commit_push"),

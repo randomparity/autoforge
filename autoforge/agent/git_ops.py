@@ -7,8 +7,8 @@ import subprocess
 from pathlib import Path
 
 from autoforge.agent.history import append_failure
-from autoforge.agent.metric import Direction, compare_metric
-from autoforge.protocol import GIT_TIMEOUT
+from autoforge.agent.metric import compare_metric
+from autoforge.campaign import GIT_TIMEOUT, Direction
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,11 @@ def git_add_commit_push(
     message: str,
     dry_run: bool = False,
 ) -> None:
-    """Stage files, commit, and optionally push."""
+    """Stage files, commit, and optionally push.
+
+    Raises:
+        subprocess.CalledProcessError: If any git command fails.
+    """
     for p in paths:
         subprocess.run(
             ["git", "add", p],
@@ -143,7 +147,7 @@ def ensure_optimization_branch(source_path: Path, branch: str) -> None:
             )
 
 
-def get_diff_summary(source_path: Path) -> str:
+def capture_diff_summary(source_path: Path) -> str:
     """Capture a short diff stat of the last commit vs its parent."""
     result = subprocess.run(
         ["git", "-C", str(source_path), "diff", "--stat", "HEAD~1", "HEAD"],
@@ -214,11 +218,12 @@ def record_result_or_revert(
     failures_path: Path,
     optimization_branch: str = "",
 ) -> bool:
-    """Record a successful result or revert the change and record a failure.
+    """Compare metric against best, record to TSV, and manage submodule state.
 
-    Args:
-        optimization_branch: If set, force-push this branch in the submodule
-            after reverting so the fork stays in sync.
+    If the metric is an improvement (or no baseline exists), commits the
+    result and submodule pointer. Otherwise, reverts the last submodule
+    commit, force-pushes the optimization branch if set, records the
+    failure to the failures TSV, and commits the revert.
 
     Returns True if the result was an improvement.
     """
@@ -227,16 +232,15 @@ def record_result_or_revert(
     )
 
     if improved:
-        print(
-            f"Improvement! {best_val} -> {metric}"
-            if best_val is not None
-            else f"Baseline: {metric}"
+        logger.info(
+            "Improvement! %s -> %s" if best_val is not None else "Baseline: %s",
+            *((best_val, metric) if best_val is not None else (metric,)),
         )
         files = [str(results_path), str(source_path)]
         git_add_commit_push(files, f"results: iteration {seq:04d}", dry_run=dry_run)
     else:
-        print(f"No improvement ({metric} vs best {best_val}). Reverting.")
-        diff_summary = get_diff_summary(source_path)
+        logger.info("No improvement (%s vs best %s). Reverting.", metric, best_val)
+        diff_summary = capture_diff_summary(source_path)
         revert_last_change(source_path)
         if optimization_branch and not dry_run:
             force_push_source(source_path, optimization_branch)

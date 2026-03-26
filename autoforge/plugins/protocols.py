@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from autoforge.campaign import ProjectConfig
 
 
 @dataclass
@@ -56,7 +59,7 @@ class Builder(Protocol):
 
     name: str
 
-    def configure(self, project_config: dict[str, Any], runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
         """Store configuration for subsequent build calls."""
         ...
 
@@ -71,7 +74,7 @@ class Deployer(Protocol):
 
     name: str
 
-    def configure(self, project_config: dict[str, Any], runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
         """Store configuration for subsequent deploy calls."""
         ...
 
@@ -86,7 +89,7 @@ class Tester(Protocol):
 
     name: str
 
-    def configure(self, project_config: dict[str, Any], runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
         """Store configuration for subsequent test calls."""
         ...
 
@@ -101,7 +104,7 @@ class Profiler(Protocol):
 
     name: str
 
-    def configure(self, project_config: dict[str, Any], runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
         """Store configuration for subsequent profile calls."""
         ...
 

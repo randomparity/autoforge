@@ -46,7 +46,7 @@ from autoforge.agent.strategy import (
     format_profile_lines,
     validate_change,
 )
-from autoforge.campaign import CampaignConfig, load_campaign, resolve_campaign_path
+from autoforge.campaign import CampaignConfig, Direction, load_campaign, resolve_campaign_path
 from autoforge.protocol import TestRequest
 
 
@@ -174,7 +174,7 @@ def cmd_judge(campaign: CampaignConfig, dry_run: bool) -> None:
     req = requests_dir()
     res = results_path()
     fail = failures_path()
-    direction = campaign.get("metric", {}).get("direction", "maximize")
+    direction: Direction = campaign.get("metric", {}).get("direction", "maximize")
 
     latest = find_latest_request(req)
     if latest is None:
@@ -377,7 +377,7 @@ def cmd_hints(
     campaign: CampaignConfig,
     arch_override: str | None,
     topic: str = "optimization",
-    list_topics_flag: bool = False,
+    show_topics: bool = False,
 ) -> None:
     """Print architecture-specific optimization hints location."""
     arch = arch_override or resolve_arch(campaign)
@@ -385,7 +385,7 @@ def cmd_hints(
         print("ERROR: No arch specified. Set [platform] arch in campaign.toml or pass --arch.")
         sys.exit(1)
     try:
-        if list_topics_flag:
+        if show_topics:
             topics = list_topics(arch)
             print(f"Available hint topics for {arch}:")
             for t in topics:

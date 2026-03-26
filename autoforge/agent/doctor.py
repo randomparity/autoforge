@@ -5,10 +5,13 @@ from __future__ import annotations
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from autoforge.campaign import REPO_ROOT
 from autoforge.plugins.loader import CATEGORY_MAP
+from autoforge.pointer import REPO_ROOT
+
+if TYPE_CHECKING:
+    from autoforge.campaign import CampaignConfig
 
 StatusLevel = Literal["pass", "warn", "fail"]
 
@@ -51,6 +54,62 @@ def _load_toml(path: Path) -> tuple[dict[str, Any] | None, str]:
         return None, f"read error: {exc}"
 
 
+def _check_toml_file(
+    path: Path,
+    layer: str,
+    name_prefix: str,
+    root: Path = REPO_ROOT,
+) -> tuple[dict[str, Any] | None, list[CheckResult]]:
+    """Load a TOML file and return parsed data plus file-exists/valid-toml check results."""
+    results: list[CheckResult] = []
+    rel = _rel(path, root)
+
+    if not path.is_file():
+        results.append(
+            CheckResult(
+                f"{name_prefix}.file_exists",
+                "fail",
+                f"{rel} not found",
+                layer,
+                path=rel,
+            )
+        )
+        return None, results
+    results.append(
+        CheckResult(
+            f"{name_prefix}.file_exists",
+            "pass",
+            rel,
+            layer,
+            path=rel,
+        )
+    )
+
+    data, err = _load_toml(path)
+    if data is None:
+        results.append(
+            CheckResult(
+                f"{name_prefix}.valid_toml",
+                "fail",
+                f"{rel}: {err}",
+                layer,
+                path=rel,
+            )
+        )
+        return None, results
+    results.append(
+        CheckResult(
+            f"{name_prefix}.valid_toml",
+            "pass",
+            "parsed successfully",
+            layer,
+            path=rel,
+        )
+    )
+
+    return data, results
+
+
 def _is_git_repo(path: Path) -> bool:
     """Check if path is a git repository (regular or submodule)."""
     return (path / ".git").exists()
@@ -58,53 +117,12 @@ def _is_git_repo(path: Path) -> bool:
 
 def check_pointer(root: Path = REPO_ROOT) -> list[CheckResult]:
     """Validate the .autoforge.toml pointer file."""
-    results: list[CheckResult] = []
     pointer_path = root / ".autoforge.toml"
-    rel = _rel(pointer_path, root)
-
-    if not pointer_path.is_file():
-        results.append(
-            CheckResult(
-                "pointer.file_exists",
-                "fail",
-                f"{rel} not found",
-                "pointer",
-                path=rel,
-            )
-        )
-        return results
-    results.append(
-        CheckResult(
-            "pointer.file_exists",
-            "pass",
-            f"{rel}",
-            "pointer",
-            path=rel,
-        )
-    )
-
-    data, err = _load_toml(pointer_path)
+    data, results = _check_toml_file(pointer_path, "pointer", "pointer", root)
     if data is None:
-        results.append(
-            CheckResult(
-                "pointer.valid_toml",
-                "fail",
-                f"{rel}: {err}",
-                "pointer",
-                path=rel,
-            )
-        )
         return results
-    results.append(
-        CheckResult(
-            "pointer.valid_toml",
-            "pass",
-            "parsed successfully",
-            "pointer",
-            path=rel,
-        )
-    )
 
+    rel = _rel(pointer_path, root)
     project = data.get("project", "")
     sprint = data.get("sprint", "")
 
@@ -207,52 +225,12 @@ def check_campaign(
     root: Path = REPO_ROOT,
 ) -> list[CheckResult]:
     """Validate the campaign TOML for the active sprint."""
-    results: list[CheckResult] = []
     path = root / "projects" / project / "sprints" / sprint / "campaign.toml"
-    rel = _rel(path, root)
-
-    if not path.is_file():
-        results.append(
-            CheckResult(
-                "campaign.file_exists",
-                "fail",
-                f"{rel} not found",
-                "campaign",
-                path=rel,
-            )
-        )
-        return results
-    results.append(
-        CheckResult(
-            "campaign.file_exists",
-            "pass",
-            rel,
-            "campaign",
-            path=rel,
-        )
-    )
-
-    data, err = _load_toml(path)
+    data, results = _check_toml_file(path, "campaign", "campaign", root)
     if data is None:
-        results.append(
-            CheckResult(
-                "campaign.valid_toml",
-                "fail",
-                f"{rel}: {err}",
-                "campaign",
-                path=rel,
-            )
-        )
         return results
-    results.append(
-        CheckResult(
-            "campaign.valid_toml",
-            "pass",
-            "parsed successfully",
-            "campaign",
-            path=rel,
-        )
-    )
+
+    rel = _rel(path, root)
 
     for section in ("campaign", "metric", "project"):
         if section in data:
@@ -437,50 +415,11 @@ def check_runner(
         return results
 
     path = root / "projects" / project / "runner.toml"
-    rel = _rel(path, root)
-
-    if not path.is_file():
-        results.append(
-            CheckResult(
-                "runner.file_exists",
-                "fail",
-                f"{rel} not found (copy from runner.toml.example)",
-                "runner",
-                path=rel,
-            )
-        )
-        return results
-    results.append(
-        CheckResult(
-            "runner.file_exists",
-            "pass",
-            rel,
-            "runner",
-            path=rel,
-        )
-    )
-
-    data, err = _load_toml(path)
+    data, results = _check_toml_file(path, "runner", "runner", root)
     if data is None:
-        results.append(
-            CheckResult(
-                "runner.valid_toml",
-                "fail",
-                f"{rel}: {err}",
-                "runner",
-                path=rel,
-            )
-        )
         return results
-    results.append(
-        CheckResult(
-            "runner.valid_toml",
-            "pass",
-            "parsed successfully",
-            "runner",
-            path=rel,
-        )
-    )
+
+    rel = _rel(path, root)
 
     paths = data.get("paths", {})
     if paths:
@@ -617,7 +556,7 @@ def _check_config_sections(
 
 def check_plugins(
     project: str,
-    campaign_data: dict[str, Any],
+    campaign_data: CampaignConfig,
     root: Path = REPO_ROOT,
 ) -> list[CheckResult]:
     """Validate plugin files referenced by the campaign."""

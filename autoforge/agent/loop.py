@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 from pathlib import Path
 
 from autoforge.agent.git_ops import (
@@ -22,10 +21,8 @@ from autoforge.agent.strategy import (
     format_profile_lines,
     validate_change,
 )
-from autoforge.campaign import CampaignConfig, load_campaign, resolve_campaign_path
+from autoforge.campaign import CampaignConfig, Direction, load_campaign, resolve_campaign_path
 from autoforge.logging_config import setup_logging
-
-logger = logging.getLogger(__name__)
 
 
 def run_interactive_iteration(
@@ -43,7 +40,7 @@ def run_interactive_iteration(
 
     history = load_history(res)
     metric_cfg = campaign["metric"]
-    direction = metric_cfg.get("direction", "maximize")
+    direction: Direction = metric_cfg.get("direction", "maximize")
     max_iter = campaign.get("campaign", {}).get("max_iterations", 50)
 
     if len(history) >= max_iter:
