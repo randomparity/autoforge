@@ -13,3 +13,5 @@ timestamp	source_commit	metric_value	description	diff_summary
  1 file changed, 10 insertions(+)"
 2026-03-26T04:25:21.698490+00:00	33853c80ef4f8fa7e59b8c50f56cad5d0f7245a8	172.182	ppc64le memcpy: mark small-copy fallback paths as unlikely	"lib/eal/ppc/include/rte_memcpy.h | 8 ++++----
  1 file changed, 4 insertions(+), 4 deletions(-)"
+2026-03-26T04:28:26.818799+00:00	0e3fa35104a2c30d3ca2e38d80152af4f2c0493e	172.7391	ppc64le memcpy: full load-then-store for rte_mov256 using 16 VSX registers	"lib/eal/ppc/include/rte_memcpy.h | 37 +++++++++++++++++++++++++++++++++++--
+ 1 file changed, 35 insertions(+), 2 deletions(-)"
