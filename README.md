@@ -1,6 +1,6 @@
-# Autosearch DPDK
+# Autoforge
 
-Iterative DPDK performance optimization through automated build-test cycles on
+Iterative erformance optimization through automated build-test cycles on
 real hardware.
 
 ## How it works
