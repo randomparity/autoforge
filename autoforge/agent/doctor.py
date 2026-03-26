@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -868,6 +869,90 @@ def format_effective_config(config: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def check_optimization_branch(
+    project: str,
+    sprint: str,
+    campaign_data: dict[str, Any],
+    root: Path = REPO_ROOT,
+) -> list[CheckResult]:
+    """Validate the optimization branch setting in campaign config (agent check)."""
+    from autoforge.agent.sprint import OPT_BRANCH_RE  # avoid circular at module level
+
+    results: list[CheckResult] = []
+    proj = campaign_data.get("project", {})
+    branch = proj.get("optimization_branch", "")
+    rel = f"projects/{project}/sprints/{sprint}/campaign.toml"
+
+    if not branch:
+        results.append(
+            CheckResult(
+                "campaign.optimization_branch",
+                "fail",
+                "project.optimization_branch not set — run 'autoforge sprint init <name>'",
+                "agent",
+                path=rel,
+            )
+        )
+        return results
+
+    if OPT_BRANCH_RE.match(branch):
+        results.append(
+            CheckResult(
+                "campaign.optimization_branch",
+                "pass",
+                f"optimization_branch = {branch!r}",
+                "agent",
+                path=rel,
+            )
+        )
+    else:
+        results.append(
+            CheckResult(
+                "campaign.optimization_branch",
+                "warn",
+                f"optimization_branch {branch!r} does not match expected pattern "
+                f"'autoforge/YYYY-MM-DD-slug' — manual override detected",
+                "agent",
+                path=rel,
+            )
+        )
+
+    # Advisory: check if the branch exists in the submodule
+    submodule = proj.get("submodule_path", "")
+    if submodule:
+        sub_path = root / submodule
+        if sub_path.is_dir() and (sub_path / ".git").exists():
+            result = subprocess.run(
+                ["git", "-C", str(sub_path), "branch", "--list", branch],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0 and not result.stdout.strip():
+                results.append(
+                    CheckResult(
+                        "campaign.optimization_branch_exists",
+                        "warn",
+                        f"Branch {branch!r} does not exist yet in submodule "
+                        f"(will be created on first submit or loop start)",
+                        "agent",
+                        path=submodule,
+                    )
+                )
+            elif result.returncode == 0:
+                results.append(
+                    CheckResult(
+                        "campaign.optimization_branch_exists",
+                        "pass",
+                        f"Branch {branch!r} exists in submodule",
+                        "agent",
+                        path=submodule,
+                    )
+                )
+
+    return results
+
+
 def run_doctor(
     role: str = "all",
     root: Path = REPO_ROOT,
@@ -928,6 +1013,10 @@ def run_doctor(
 
     # Layer 5: Sprint structure
     results.extend(check_sprint(project, sprint, root))
+
+    # Layer 6: Optimization branch (agent only)
+    if campaign_data and role in ("agent", "all"):
+        results.extend(check_optimization_branch(project, sprint, campaign_data, root))
 
     # Collect effective config
     effective = _collect_effective_config(project, sprint, role, root)

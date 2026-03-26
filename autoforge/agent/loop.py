@@ -214,7 +214,12 @@ def main() -> None:
     explicit = Path(args.campaign) if args.campaign else None
     campaign = load_campaign(resolve_campaign_path(explicit))
     source_path = Path(submodule_path(campaign))
-    opt_branch = optimization_branch(campaign) or "autoforge/optimize"
+    opt_branch = optimization_branch(campaign)
+    if not opt_branch:
+        raise SystemExit(
+            "ERROR: campaign.toml is missing project.optimization_branch. "
+            "Run 'autoforge sprint init <name>' to create a properly configured sprint."
+        )
     ensure_optimization_branch(source_path, opt_branch)
 
     if args.baseline:
