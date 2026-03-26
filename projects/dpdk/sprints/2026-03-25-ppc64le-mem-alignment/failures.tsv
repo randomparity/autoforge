@@ -31,3 +31,5 @@ timestamp	source_commit	metric_value	description	diff_summary
  1 file changed, 1 insertion(+), 1 deletion(-)"
 2026-03-26T13:37:49.813069+00:00	5338f4afee92d19d4a1cb13974e29fcd11f85cf6	139.8978	memif: try -Os for smaller code / better icache	"drivers/net/memif/meson.build | 3 +++
  1 file changed, 3 insertions(+)"
+2026-03-26T13:39:33.382921+00:00	bbc5506d3ca4b546e581784b9e1792f29efc3220	180.9665	memif: add -fomit-frame-pointer to free register	"drivers/net/memif/meson.build | 2 ++
+ 1 file changed, 2 insertions(+)"
