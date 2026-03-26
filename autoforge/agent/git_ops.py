@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from autoforge.agent.history import append_failure
@@ -11,6 +12,19 @@ from autoforge.agent.metric import compare_metric
 from autoforge.campaign import GIT_TIMEOUT, Direction
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ResultContext:
+    """Bundles request metadata for result recording."""
+
+    seq: int
+    commit: str
+    description: str
+    source_path: Path
+    results_path: Path
+    failures_path: Path
+    optimization_branch: str = field(default="")
 
 
 class DirtyWorkingTreeError(RuntimeError):
@@ -205,18 +219,44 @@ def full_revert(source_path: Path, branch: str, dry_run: bool) -> str:
     return old_head
 
 
+def _record_improvement(
+    metric: float | None,
+    best_val: float | None,
+    ctx: ResultContext,
+    dry_run: bool,
+) -> None:
+    """Log and commit an improved result."""
+    logger.info(
+        "Improvement! %s -> %s" if best_val is not None else "Baseline: %s",
+        *((best_val, metric) if best_val is not None else (metric,)),
+    )
+    files = [str(ctx.results_path), str(ctx.source_path)]
+    git_add_commit_push(files, f"results: iteration {ctx.seq:04d}", dry_run=dry_run)
+
+
+def _revert_and_record_failure(
+    metric: float | None,
+    best_val: float | None,
+    ctx: ResultContext,
+    dry_run: bool,
+) -> None:
+    """Revert the submodule, record the failure, and commit."""
+    logger.info("No improvement (%s vs best %s). Reverting.", metric, best_val)
+    diff_summary = capture_diff_summary(ctx.source_path)
+    revert_last_change(ctx.source_path)
+    if ctx.optimization_branch and not dry_run:
+        force_push_source(ctx.source_path, ctx.optimization_branch)
+    append_failure(ctx.commit, metric, ctx.description, diff_summary, path=ctx.failures_path)
+    files = [str(ctx.results_path), str(ctx.failures_path), str(ctx.source_path)]
+    git_add_commit_push(files, f"revert: iteration {ctx.seq:04d}", dry_run=dry_run)
+
+
 def record_result_or_revert(
     metric: float | None,
     best_val: float | None,
     direction: Direction,
-    seq: int,
-    commit: str,
-    description: str,
-    source_path: Path,
-    dry_run: bool,
-    results_path: Path,
-    failures_path: Path,
-    optimization_branch: str = "",
+    ctx: ResultContext,
+    dry_run: bool = False,
 ) -> bool:
     """Compare metric against best, record to TSV, and manage submodule state.
 
@@ -232,20 +272,8 @@ def record_result_or_revert(
     )
 
     if improved:
-        logger.info(
-            "Improvement! %s -> %s" if best_val is not None else "Baseline: %s",
-            *((best_val, metric) if best_val is not None else (metric,)),
-        )
-        files = [str(results_path), str(source_path)]
-        git_add_commit_push(files, f"results: iteration {seq:04d}", dry_run=dry_run)
+        _record_improvement(metric, best_val, ctx, dry_run)
     else:
-        logger.info("No improvement (%s vs best %s). Reverting.", metric, best_val)
-        diff_summary = capture_diff_summary(source_path)
-        revert_last_change(source_path)
-        if optimization_branch and not dry_run:
-            force_push_source(source_path, optimization_branch)
-        append_failure(commit, metric, description, diff_summary, path=failures_path)
-        files = [str(results_path), str(failures_path), str(source_path)]
-        git_add_commit_push(files, f"revert: iteration {seq:04d}", dry_run=dry_run)
+        _revert_and_record_failure(metric, best_val, ctx, dry_run)
 
     return improved

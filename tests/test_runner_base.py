@@ -221,9 +221,12 @@ class TestDeployRunnerExecutePhase:
 
 
 class TestTestRunnerExecutePhase:
+    @patch("autoforge.runner.base.complete_request")
     @patch("autoforge.runner.base.update_status")
     @patch("autoforge.runner.base.fail")
-    def test_success_transitions_to_completed(self, mock_fail, mock_update, tmp_path) -> None:
+    def test_success_transitions_to_completed(
+        self, mock_fail, mock_update, mock_complete, tmp_path
+    ) -> None:
         req, path = _make_request(tmp_path, status="deployed")
         tester = _mock_tester(success=True)
         with patch("autoforge.runner.base.load_component", return_value=tester):
@@ -235,10 +238,9 @@ class TestTestRunnerExecutePhase:
             runner.execute_phase(req, path)
         statuses = [call[0][1] for call in mock_update.call_args_list]
         assert STATUS_RUNNING in statuses
-        assert STATUS_COMPLETED in statuses
+        mock_complete.assert_called_once()
+        assert mock_complete.call_args[1]["metric_value"] == 86.0
         mock_fail.assert_not_called()
-        completed_call = [c for c in mock_update.call_args_list if c[0][1] == STATUS_COMPLETED][0]
-        assert completed_call[1]["metric_value"] == 86.0
 
     @patch("autoforge.runner.base.update_status")
     @patch("autoforge.runner.base.fail")
@@ -256,9 +258,10 @@ class TestTestRunnerExecutePhase:
 
 
 class TestFullRunnerExecutePhase:
+    @patch("autoforge.runner.base.complete_request")
     @patch("autoforge.runner.base.update_status")
     @patch("autoforge.runner.base.fail")
-    def test_full_pipeline_success(self, mock_fail, mock_update, tmp_path) -> None:
+    def test_full_pipeline_success(self, mock_fail, mock_update, mock_complete, tmp_path) -> None:
         req, path = _make_request(tmp_path, status="claimed")
         builder = _mock_builder(success=True)
         deployer = _mock_deployer(success=True)
@@ -281,7 +284,7 @@ class TestFullRunnerExecutePhase:
         assert STATUS_DEPLOYING in statuses
         assert STATUS_DEPLOYED in statuses
         assert STATUS_RUNNING in statuses
-        assert STATUS_COMPLETED in statuses
+        mock_complete.assert_called_once()
         mock_fail.assert_not_called()
 
     @patch("autoforge.runner.base.update_status")

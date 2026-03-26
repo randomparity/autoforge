@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from autoforge.agent.git_ops import (
+    ResultContext,
     force_push_source,
     full_revert,
     git_add_commit_push,
@@ -39,6 +40,7 @@ __all__ = [
     "main",
     "next_sequence",
     "poll_for_completion",
+    "ResultContext",
     "record_result_or_revert",
     "validate_change",
 ]

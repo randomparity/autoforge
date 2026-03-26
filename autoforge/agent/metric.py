@@ -2,12 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from autoforge.campaign import Direction
-
-if TYPE_CHECKING:
-    from autoforge.campaign import CampaignConfig
+from autoforge.campaign import CampaignConfig, Direction, metric_threshold
 
 
 def compare_metric(current: float, best: float, direction: Direction) -> bool:
@@ -30,7 +25,7 @@ def below_threshold(
     campaign: CampaignConfig,
 ) -> bool:
     """Check if improvement between metric and best_val is below threshold."""
-    threshold = campaign.get("metric", {}).get("threshold")
-    if threshold is None or metric is None or best_val is None:
+    threshold = metric_threshold(campaign)
+    if not threshold or metric is None or best_val is None:
         return False
     return abs(metric - best_val) < threshold

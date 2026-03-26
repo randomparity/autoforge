@@ -6,18 +6,23 @@ import logging
 import subprocess
 import time
 from abc import ABC, abstractmethod
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from autoforge.campaign import GIT_TIMEOUT, CampaignConfig
+from autoforge.campaign import (
+    GIT_TIMEOUT,
+    CampaignConfig,
+    project_name,
+)
+from autoforge.campaign import (
+    project_config as _project_config,
+)
 from autoforge.plugins.loader import load_component
 from autoforge.plugins.protocols import BuildResult, DeployResult
 from autoforge.protocol import (
     STATUS_BUILDING,
     STATUS_BUILT,
     STATUS_CLAIMED,
-    STATUS_COMPLETED,
     STATUS_DEPLOYED,
     STATUS_DEPLOYING,
     STATUS_PENDING,
@@ -27,6 +32,7 @@ from autoforge.protocol import (
 )
 from autoforge.runner.protocol import (
     claim,
+    complete_request,
     fail,
     find_by_status,
     update_status,
@@ -35,9 +41,9 @@ from autoforge.runner.protocol import (
 logger = logging.getLogger(__name__)
 
 
-def _project_name(campaign: CampaignConfig) -> str:
+def _get_project_name(campaign: CampaignConfig) -> str:
     """Extract the project name from a campaign config."""
-    return campaign.get("project", {}).get("name", "dpdk")
+    return project_name(campaign)
 
 
 def git_pull() -> bool:
@@ -82,8 +88,8 @@ def _run_build(
     config: dict[str, Any],
 ) -> BuildResult | None:
     """Execute the build phase. Returns BuildResult on success, None on failure."""
-    project_config = campaign.get("project", {})
-    project_name = _project_name(campaign)
+    proj_cfg = _project_config(campaign)
+    project_name = _get_project_name(campaign)
     paths = config.get("paths", {})
     timeouts = config.get("timeouts", {})
     source_path = Path(paths.get("dpdk_src", "/opt/dpdk"))
@@ -94,7 +100,7 @@ def _run_build(
         project_name,
         "build",
         request.build_plugin,
-        project_config=project_config,
+        project_config=proj_cfg,
         runner_config=config,
     )
 
@@ -117,14 +123,14 @@ def _run_deploy(
     build_result: BuildResult,
 ) -> DeployResult | None:
     """Execute the deploy phase. Returns DeployResult on success, None on failure."""
-    project_config = campaign.get("project", {})
-    project_name = _project_name(campaign)
+    proj_cfg = _project_config(campaign)
+    project_name = _get_project_name(campaign)
 
     deployer = load_component(
         project_name,
         "deploy",
         request.deploy_plugin,
-        project_config=project_config,
+        project_config=proj_cfg,
         runner_config=config,
     )
 
@@ -147,8 +153,8 @@ def _run_test(
     deploy_result: DeployResult,
 ) -> None:
     """Execute the test phase and update request to completed/failed."""
-    project_config = campaign.get("project", {})
-    project_name = _project_name(campaign)
+    proj_cfg = _project_config(campaign)
+    project_name = _get_project_name(campaign)
     timeouts = config.get("timeouts", {})
     test_timeout = int(timeouts.get("test_minutes", 10)) * 60
 
@@ -156,7 +162,7 @@ def _run_test(
         project_name,
         "test",
         request.test_plugin,
-        project_config=project_config,
+        project_config=proj_cfg,
         runner_config=config,
     )
 
@@ -167,14 +173,12 @@ def _run_test(
         fail(request, request_path, error=test_result.error or "Test failed")
         return
 
-    update_status(
+    complete_request(
         request,
-        STATUS_COMPLETED,
         request_path,
         results_json=test_result.results_json,
         results_summary=test_result.results_summary,
         metric_value=test_result.metric_value,
-        completed_at=datetime.now(UTC).isoformat(),
     )
 
 

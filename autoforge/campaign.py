@@ -73,9 +73,8 @@ class CampaignConfig(TypedDict, total=False):
     """Full campaign configuration as loaded from TOML.
 
     Outer section keys use total=False because TOML files may omit sections.
-    Callers should use campaign.get("section", {}) for optional sections,
-    or direct subscript campaign["section"] for sections known to be present
-    after validation.
+    Use the accessor functions below (e.g. metric_direction, project_name)
+    instead of raw .get() chains.
     """
 
     campaign: CampaignMeta
@@ -85,6 +84,96 @@ class CampaignConfig(TypedDict, total=False):
     goal: GoalConfig
     profiling: ProfilingConfig
     platform: PlatformConfig
+
+
+# --- Typed accessor functions ---
+# These replace raw .get() chains throughout the codebase with
+# a single location for default values and type annotations.
+
+
+def metric_direction(cfg: CampaignConfig) -> Direction:
+    """Return the metric direction from campaign config."""
+    return cfg.get("metric", {}).get("direction", "maximize")
+
+
+def metric_name(cfg: CampaignConfig) -> str:
+    """Return the metric name from campaign config."""
+    return cfg.get("metric", {}).get("name", "throughput")
+
+
+def metric_threshold(cfg: CampaignConfig) -> float:
+    """Return the metric threshold from campaign config."""
+    return cfg.get("metric", {}).get("threshold", 0.0)
+
+
+def metric_config(cfg: CampaignConfig) -> MetricConfig:
+    """Return the metric config section."""
+    return cfg.get("metric", {})
+
+
+def project_name(cfg: CampaignConfig) -> str:
+    """Return the project name from campaign config."""
+    return cfg.get("project", {}).get("name", "dpdk")
+
+
+def project_config(cfg: CampaignConfig) -> ProjectConfig:
+    """Return the project config section."""
+    return cfg.get("project", {})
+
+
+def submodule_path(cfg: CampaignConfig) -> str:
+    """Return the submodule path from campaign config."""
+    return cfg.get("project", {}).get("submodule_path", "dpdk")
+
+
+def optimization_branch(cfg: CampaignConfig) -> str:
+    """Return the optimization branch from campaign config."""
+    return cfg.get("project", {}).get("optimization_branch", "")
+
+
+def agent_poll_interval(cfg: CampaignConfig) -> int:
+    """Return the agent poll interval in seconds."""
+    return cfg.get("agent", {}).get("poll_interval", 30)
+
+
+def agent_timeout(cfg: CampaignConfig) -> int:
+    """Return the agent timeout in seconds."""
+    return cfg.get("agent", {}).get("timeout_minutes", 60) * 60
+
+
+def campaign_max_iterations(cfg: CampaignConfig) -> int:
+    """Return the max iterations from campaign config."""
+    return cfg.get("campaign", {}).get("max_iterations", 50)
+
+
+def campaign_name(cfg: CampaignConfig) -> str:
+    """Return the campaign name."""
+    return cfg.get("campaign", {}).get("name", "unnamed")
+
+
+def campaign_meta(cfg: CampaignConfig) -> CampaignMeta:
+    """Return the campaign metadata section."""
+    return cfg.get("campaign", {})
+
+
+def goal_description(cfg: CampaignConfig) -> str:
+    """Return the goal description from campaign config."""
+    return cfg.get("goal", {}).get("description", "").strip()
+
+
+def goal_config(cfg: CampaignConfig) -> GoalConfig:
+    """Return the goal config section."""
+    return cfg.get("goal", {})
+
+
+def platform_arch(cfg: CampaignConfig) -> str | None:
+    """Return the platform arch from campaign config, or None if unset."""
+    return cfg.get("platform", {}).get("arch")
+
+
+def platform_config(cfg: CampaignConfig) -> PlatformConfig:
+    """Return the platform config section."""
+    return cfg.get("platform", {})
 
 
 def resolve_campaign_path(explicit: Path | None = None) -> Path:

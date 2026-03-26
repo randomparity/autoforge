@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 
 from autoforge.agent.git_ops import (
+    ResultContext,
     ensure_optimization_branch,
     git_add_commit_push,
     git_submodule_head,
@@ -21,7 +22,19 @@ from autoforge.agent.strategy import (
     format_profile_lines,
     validate_change,
 )
-from autoforge.campaign import CampaignConfig, Direction, load_campaign, resolve_campaign_path
+from autoforge.campaign import (
+    CampaignConfig,
+    Direction,
+    agent_poll_interval,
+    agent_timeout,
+    campaign_max_iterations,
+    load_campaign,
+    metric_direction,
+    metric_threshold,
+    optimization_branch,
+    resolve_campaign_path,
+    submodule_path,
+)
 from autoforge.logging_config import setup_logging
 
 
@@ -39,9 +52,8 @@ def run_interactive_iteration(
     fail = failures_path()
 
     history = load_history(res)
-    metric_cfg = campaign["metric"]
-    direction: Direction = metric_cfg.get("direction", "maximize")
-    max_iter = campaign.get("campaign", {}).get("max_iterations", 50)
+    direction: Direction = metric_direction(campaign)
+    max_iter = campaign_max_iterations(campaign)
 
     if len(history) >= max_iter:
         print(f"Reached max iterations ({max_iter}). Stopping.")
@@ -64,9 +76,6 @@ def run_interactive_iteration(
     commit = git_submodule_head(source_path)
     description = input("Describe this change: ").strip() or "No description"
     seq = next_sequence(req)
-    poll_interval = campaign.get("agent", {}).get("poll_interval", 30)
-    timeout = campaign.get("agent", {}).get("timeout_minutes", 60) * 60
-
     request_path = create_request(seq, commit, campaign, description, req)
 
     git_add_commit_push(
@@ -84,8 +93,8 @@ def run_interactive_iteration(
     try:
         result = poll_for_completion(
             seq,
-            timeout=timeout,
-            interval=poll_interval,
+            timeout=agent_timeout(campaign),
+            interval=agent_poll_interval(campaign),
             requests_dir=req,
         )
     except TimeoutError:
@@ -111,23 +120,19 @@ def run_interactive_iteration(
 
     append_result(seq, commit, metric, "completed", description, path=res)
 
-    opt_branch = campaign.get("project", {}).get("optimization_branch", "")
-    record_result_or_revert(
-        metric,
-        best_val,
-        direction,
-        seq,
-        commit,
-        description,
-        source_path,
-        dry_run,
+    ctx = ResultContext(
+        seq=seq,
+        commit=commit,
+        description=description,
+        source_path=source_path,
         results_path=res,
         failures_path=fail,
-        optimization_branch=opt_branch,
+        optimization_branch=optimization_branch(campaign),
     )
+    record_result_or_revert(metric, best_val, direction, ctx, dry_run=dry_run)
 
     if below_threshold(metric, best_val, campaign):
-        threshold = campaign["metric"]["threshold"]
+        threshold = metric_threshold(campaign)
         print(f"Improvement below threshold ({threshold}). Stopping early.")
         return False
 
@@ -144,8 +149,6 @@ def run_baseline(
     commit = git_submodule_head(source_path)
     seq = next_sequence(req)
     description = "Baseline: unmodified DPDK"
-    poll_interval = campaign.get("agent", {}).get("poll_interval", 30)
-    timeout = campaign.get("agent", {}).get("timeout_minutes", 60) * 60
 
     request_path = create_request(seq, commit, campaign, description, req)
 
@@ -163,8 +166,8 @@ def run_baseline(
     try:
         result = poll_for_completion(
             seq,
-            timeout=timeout,
-            interval=poll_interval,
+            timeout=agent_timeout(campaign),
+            interval=agent_poll_interval(campaign),
             requests_dir=req,
         )
     except TimeoutError:
@@ -210,8 +213,8 @@ def main() -> None:
 
     explicit = Path(args.campaign) if args.campaign else None
     campaign = load_campaign(resolve_campaign_path(explicit))
-    source_path = Path(campaign.get("project", {}).get("submodule_path", "dpdk"))
-    opt_branch = campaign.get("project", {}).get("optimization_branch", "autosearch/optimize")
+    source_path = Path(submodule_path(campaign))
+    opt_branch = optimization_branch(campaign) or "autosearch/optimize"
     ensure_optimization_branch(source_path, opt_branch)
 
     if args.baseline:

@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from autoforge.campaign import CampaignConfig
+from autoforge.campaign import CampaignConfig, project_config
 from autoforge.plugins.protocols import (
     Builder,
     Deployer,
@@ -245,7 +245,7 @@ def load_pipeline(
     Raises:
         ValueError: If required plugins are missing from config.
     """
-    project_cfg = campaign.get("project", {})
+    project_cfg = project_config(campaign)
 
     build_name = project_cfg.get("build")
     deploy_name = project_cfg.get("deploy")

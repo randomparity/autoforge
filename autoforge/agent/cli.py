@@ -8,6 +8,7 @@ from pathlib import Path
 
 from autoforge.agent.git_ops import (
     DirtyWorkingTreeError,
+    ResultContext,
     check_git_clean,
     full_revert,
     git_add_commit_push,
@@ -46,16 +47,26 @@ from autoforge.agent.strategy import (
     format_profile_lines,
     validate_change,
 )
-from autoforge.campaign import CampaignConfig, Direction, load_campaign, resolve_campaign_path
+from autoforge.campaign import (
+    CampaignConfig,
+    Direction,
+    agent_poll_interval,
+    agent_timeout,
+    load_campaign,
+    metric_direction,
+    optimization_branch,
+    resolve_campaign_path,
+    submodule_path,
+)
 from autoforge.protocol import TestRequest
 
 
 def _source_path(campaign: CampaignConfig) -> Path:
-    return Path(campaign.get("project", {}).get("submodule_path", "dpdk"))
+    return Path(submodule_path(campaign))
 
 
 def _optimization_branch(campaign: CampaignConfig) -> str:
-    return campaign.get("project", {}).get("optimization_branch", "")
+    return optimization_branch(campaign)
 
 
 def cmd_context(campaign: CampaignConfig) -> None:
@@ -131,14 +142,11 @@ def cmd_poll(campaign: CampaignConfig) -> None:
         _print_result(latest)
         return
 
-    poll_interval = campaign.get("agent", {}).get("poll_interval", 30)
-    timeout = campaign.get("agent", {}).get("timeout_minutes", 60) * 60
-
     try:
         result = poll_for_completion(
             latest.sequence,
-            timeout=timeout,
-            interval=poll_interval,
+            timeout=agent_timeout(campaign),
+            interval=agent_poll_interval(campaign),
             requests_dir=req,
         )
     except TimeoutError:
@@ -174,7 +182,7 @@ def cmd_judge(campaign: CampaignConfig, dry_run: bool) -> None:
     req = requests_dir()
     res = results_path()
     fail = failures_path()
-    direction: Direction = campaign.get("metric", {}).get("direction", "maximize")
+    direction: Direction = metric_direction(campaign)
 
     latest = find_latest_request(req)
     if latest is None:
@@ -203,19 +211,16 @@ def cmd_judge(campaign: CampaignConfig, dry_run: bool) -> None:
         tags=req_tags,
     )
 
-    record_result_or_revert(
-        metric,
-        best_val,
-        direction,
-        latest.sequence,
-        commit,
-        description,
-        source_path,
-        dry_run,
+    ctx = ResultContext(
+        seq=latest.sequence,
+        commit=commit,
+        description=description,
+        source_path=source_path,
         results_path=res,
         failures_path=fail,
         optimization_branch=_optimization_branch(campaign),
     )
+    record_result_or_revert(metric, best_val, direction, ctx, dry_run=dry_run)
 
 
 def _poll_and_record(
@@ -232,14 +237,11 @@ def _poll_and_record(
         print(f"[dry-run] Request written to {request_path}")
         return
 
-    poll_interval = campaign.get("agent", {}).get("poll_interval", 30)
-    timeout = campaign.get("agent", {}).get("timeout_minutes", 60) * 60
-
     try:
         result = poll_for_completion(
             seq,
-            timeout=timeout,
-            interval=poll_interval,
+            timeout=agent_timeout(campaign),
+            interval=agent_poll_interval(campaign),
             requests_dir=req,
         )
     except TimeoutError:

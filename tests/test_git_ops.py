@@ -89,13 +89,23 @@ class TestFullRevert:
 
 class TestRecordResultOrRevertWithBranch:
     def test_revert_force_pushes_when_branch_set(self, tmp_path: Path) -> None:
-        from autoforge.agent.git_ops import record_result_or_revert
+        from autoforge.agent.git_ops import ResultContext, record_result_or_revert
 
         res = tmp_path / "results.tsv"
         res.write_text("sequence\ttimestamp\tsource_commit\tmetric_value\tstatus\tdescription\n")
         fail = tmp_path / "failures.tsv"
         dpdk = tmp_path / "dpdk"
         dpdk.mkdir()
+
+        ctx = ResultContext(
+            seq=1,
+            commit="abc123",
+            description="test",
+            source_path=dpdk,
+            results_path=res,
+            failures_path=fail,
+            optimization_branch="autosearch/optimize",
+        )
 
         with (
             patch("autoforge.agent.git_ops.compare_metric", return_value=False),
@@ -108,27 +118,30 @@ class TestRecordResultOrRevertWithBranch:
                 metric=80.0,
                 best_val=86.0,
                 direction="maximize",
-                seq=1,
-                commit="abc123",
-                description="test",
-                source_path=dpdk,
+                ctx=ctx,
                 dry_run=False,
-                results_path=res,
-                failures_path=fail,
-                optimization_branch="autosearch/optimize",
             )
 
         assert result is False
         mock_push.assert_called_once_with(dpdk, "autosearch/optimize")
 
     def test_revert_skips_push_when_no_branch(self, tmp_path: Path) -> None:
-        from autoforge.agent.git_ops import record_result_or_revert
+        from autoforge.agent.git_ops import ResultContext, record_result_or_revert
 
         res = tmp_path / "results.tsv"
         res.write_text("sequence\ttimestamp\tsource_commit\tmetric_value\tstatus\tdescription\n")
         fail = tmp_path / "failures.tsv"
         dpdk = tmp_path / "dpdk"
         dpdk.mkdir()
+
+        ctx = ResultContext(
+            seq=1,
+            commit="abc123",
+            description="test",
+            source_path=dpdk,
+            results_path=res,
+            failures_path=fail,
+        )
 
         with (
             patch("autoforge.agent.git_ops.compare_metric", return_value=False),
@@ -141,13 +154,8 @@ class TestRecordResultOrRevertWithBranch:
                 metric=80.0,
                 best_val=86.0,
                 direction="maximize",
-                seq=1,
-                commit="abc123",
-                description="test",
-                source_path=dpdk,
+                ctx=ctx,
                 dry_run=False,
-                results_path=res,
-                failures_path=fail,
             )
 
         mock_push.assert_not_called()

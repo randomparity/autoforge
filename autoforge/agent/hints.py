@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from autoforge.campaign import CampaignConfig
+from autoforge.campaign import CampaignConfig
+from autoforge.campaign import platform_arch as _platform_arch
 
 KNOWN_ARCHES: frozenset[str] = frozenset(
     {
@@ -183,4 +183,4 @@ def resolve_arch(campaign: CampaignConfig) -> str | None:
     Returns:
         Architecture string, or None if not configured.
     """
-    return campaign.get("platform", {}).get("arch")
+    return _platform_arch(campaign)

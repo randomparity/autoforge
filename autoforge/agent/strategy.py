@@ -11,8 +11,17 @@ from autoforge.agent.hints import resolve_arch, workload_hints
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from autoforge.campaign import CampaignConfig
     from autoforge.protocol import TestRequest
+
+from autoforge.campaign import (
+    CampaignConfig,
+    campaign_meta,
+    campaign_name,
+    goal_description,
+    metric_direction,
+    metric_name,
+    project_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,17 +42,16 @@ def format_context(
     Returns:
         A multi-line string suitable for display or prompt injection.
     """
-    metric_cfg = campaign.get("metric", {})
-    project_cfg = campaign.get("project", {})
-    campaign_cfg = campaign.get("campaign", {})
+    proj_cfg = project_config(campaign)
+    camp_meta = campaign_meta(campaign)
 
-    goal = campaign.get("goal", {}).get("description", "").strip()
+    goal = goal_description(campaign)
 
     lines = [
-        f"Campaign: {campaign_cfg.get('name', 'unnamed')}",
-        f"Objective: {metric_cfg.get('direction', 'maximize')} {metric_cfg.get('name', '?')}",
-        f"Project scope: {', '.join(project_cfg.get('scope', []))}",
-        f"Iterations: {len(history)} / {campaign_cfg.get('max_iterations', '?')}",
+        f"Campaign: {campaign_name(campaign)}",
+        f"Objective: {metric_direction(campaign)} {metric_name(campaign)}",
+        f"Project scope: {', '.join(proj_cfg.get('scope', []))}",
+        f"Iterations: {len(history)} / {camp_meta.get('max_iterations', '?')}",
         "",
     ]
 
@@ -53,7 +61,7 @@ def format_context(
 
     scored = _scored_rows(history)
     if scored:
-        selector = min if metric_cfg.get("direction") == "minimize" else max
+        selector = min if metric_direction(campaign) == "minimize" else max
         best_val, best_row = selector(scored, key=lambda x: x[0])
         lines.append(f"Best so far: {best_val} ({best_row.get('description', '?')})")
     else:

@@ -11,6 +11,7 @@ from typing import Any
 from autoforge.campaign import GIT_TIMEOUT
 from autoforge.protocol import (
     STATUS_CLAIMED,
+    STATUS_COMPLETED,
     STATUS_FAILED,
     StatusLiteral,
     TestRequest,
@@ -181,6 +182,36 @@ def update_status(
         )
     else:
         logger.debug("Pushed status %s for request %04d", status, request.sequence)
+
+
+def complete_request(
+    request: TestRequest,
+    request_path: Path,
+    *,
+    results_json: dict[str, Any] | None = None,
+    results_summary: str | None = None,
+    metric_value: float | None = None,
+    completed_at: str | None = None,
+) -> None:
+    """Mark a request as completed with test results.
+
+    Args:
+        request: The test request to mark as completed.
+        request_path: Path to the request JSON file.
+        results_json: Test results as a dict.
+        results_summary: Human-readable results summary.
+        metric_value: Extracted metric value.
+        completed_at: ISO timestamp of completion (defaults to now).
+    """
+    update_status(
+        request,
+        STATUS_COMPLETED,
+        request_path,
+        results_json=results_json,
+        results_summary=results_summary,
+        metric_value=metric_value,
+        completed_at=completed_at or datetime.now(UTC).isoformat(),
+    )
 
 
 def fail(
