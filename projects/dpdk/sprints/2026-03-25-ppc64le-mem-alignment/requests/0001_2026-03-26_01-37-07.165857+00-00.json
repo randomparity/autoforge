@@ -9,17 +9,17 @@
   "profile_plugin": "perf-record",
   "metric_name": "throughput_mpps",
   "metric_path": "throughput_mpps",
-  "status": "building",
+  "status": "failed",
   "claimed_at": "2026-03-26T01:38:18.383490+00:00",
   "built_at": null,
   "deployed_at": null,
-  "completed_at": null,
+  "completed_at": "2026-03-26T01:39:00.298276+00:00",
   "build_runner_id": null,
   "deploy_runner_id": null,
   "test_runner_id": null,
-  "build_log_snippet": null,
+  "build_log_snippet": "\nfatal: cannot change to '/home/user/src/dpdk': No such file or directory\n",
   "results_json": null,
   "results_summary": null,
   "metric_value": null,
-  "error": null
+  "error": "Build failed"
 }
