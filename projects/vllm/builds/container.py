@@ -111,6 +111,8 @@ class VllmContainerBuilder:
                 [
                     "--build-arg",
                     "VLLM_USE_PRECOMPILED=1",
+                    "--build-arg",
+                    f"VLLM_MERGE_BASE_COMMIT={commit}",
                     "-t",
                     self._local_tag,
                     "-f",
