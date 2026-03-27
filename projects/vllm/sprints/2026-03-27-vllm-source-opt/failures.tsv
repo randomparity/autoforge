@@ -10,3 +10,5 @@ timestamp	source_commit	metric_value	description	diff_summary
  2 files changed, 7 insertions(+), 30 deletions(-)"
 2026-03-27T21:16:11.594670+00:00	de93094009f260e9aa940298ce712cadb791076a	2302.896881995742	decode fast path in _prepare_inputs: skip np.repeat/cumsum	"vllm/v1/worker/gpu_model_runner.py | 38 +++++++++++++++++++++++++-------------
  1 file changed, 25 insertions(+), 13 deletions(-)"
+2026-03-27T22:07:43.790549+00:00	d6e19a735624aa9054a8a6d353dba662a16d7cd0	2398.7517709869303	increase max_num_seqs to 512	"vllm/engine/arg_utils.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
