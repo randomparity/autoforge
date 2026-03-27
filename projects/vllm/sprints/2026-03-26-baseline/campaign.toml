@@ -1,0 +1,16 @@
+[campaign]
+name = "vllm-serving-throughput"
+max_iterations = 30
+
+[metric]
+name = "output_throughput_tok_s"
+path = "output_throughput_tok_s"
+direction = "maximize"
+threshold = 2.0    # keep changes that improve throughput by >= 2%
+
+[project]
+name = "vllm"
+build = "container"
+deploy = "podman-gpu"
+test = "bench-serving"
+profiler = "nvidia-smi"

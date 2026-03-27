@@ -93,8 +93,8 @@ def _run_build(
     proj_name = project_name(campaign)
     paths = config.get("paths", {})
     timeouts = config.get("timeouts", {})
-    source_path = Path(paths.get("dpdk_src", "/opt/dpdk"))
-    build_dir = Path(paths.get("build_dir", "/tmp/dpdk-build"))
+    source_path = Path(paths.get("source_dir", paths.get("dpdk_src", "/opt/dpdk")))
+    build_dir = Path(paths.get("build_dir", "/tmp/build"))
     build_timeout = int(timeouts.get("build_minutes", 30)) * 60
 
     builder = load_component(
@@ -289,7 +289,7 @@ class DeployRunner(PhaseRunner):
             log="",
             duration_seconds=0,
             artifacts={
-                "build_dir": self.config.get("paths", {}).get("build_dir", "/tmp/dpdk-build"),
+                "build_dir": self.config.get("paths", {}).get("build_dir", "/tmp/build"),
             },
         )
         _run_deploy(request, request_path, self.campaign, self.config, build_result)
@@ -305,7 +305,7 @@ class TestRunner(PhaseRunner):
         deploy_result = DeployResult(
             success=True,
             target_info={
-                "build_dir": self.config.get("paths", {}).get("build_dir", "/tmp/dpdk-build"),
+                "build_dir": self.config.get("paths", {}).get("build_dir", "/tmp/build"),
             },
         )
         _run_test(request, request_path, self.campaign, self.config, deploy_result)

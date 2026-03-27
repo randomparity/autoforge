@@ -1,0 +1,4 @@
+[build]
+mode = "prebuilt"                              # "prebuilt" or "source"
+base_image = "docker.io/vllm/vllm-openai:latest"
+local_tag = "localhost/vllm-bench:latest"

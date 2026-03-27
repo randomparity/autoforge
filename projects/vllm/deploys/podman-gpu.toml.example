@@ -1,0 +1,17 @@
+[deploy]
+model = "Qwen/Qwen3-0.6B"
+port = 8000
+container_name = "vllm-bench"
+hf_cache = "/home/user/.cache/huggingface"
+gpu_memory_utilization = 0.90
+startup_timeout = 300
+
+# Extra engine args passed after --model (list of strings)
+engine_args = [
+    "--max-num-seqs", "256",
+    "--enable-chunked-prefill",
+]
+
+[deploy.env]
+HF_TOKEN = ""       # set in the real .toml (gitignored)
+# VLLM_ATTENTION_BACKEND = "FLASH_ATTN"

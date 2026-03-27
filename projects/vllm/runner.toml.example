@@ -1,0 +1,12 @@
+[runner]
+phase = "all"
+log_level = "info"
+poll_interval = 30
+
+[paths]
+source_dir = "/home/user/src/vllm"   # only needed for source builds
+build_dir = "/tmp/vllm-build"
+
+[timeouts]
+build_minutes = 60
+test_minutes = 20
