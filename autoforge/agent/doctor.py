@@ -619,6 +619,7 @@ def check_plugins(
                     )
                 )
                 results.extend(_check_config_sections(data, toml_path, category, rel_toml, root))
+                results.extend(_check_sensitive_empty(data, rel_toml, category))
             else:
                 results.append(
                     CheckResult(
@@ -797,6 +798,51 @@ def _format_config_value(value: Any, indent: int = 0) -> str:
     return repr(value)
 
 
+_SENSITIVE_PATTERNS = frozenset({"token", "key", "secret", "password", "credential", "auth"})
+
+
+def _is_sensitive_key(key: str) -> bool:
+    lower = key.lower()
+    return any(pat in lower for pat in _SENSITIVE_PATTERNS)
+
+
+def _redact_config_value(key: str, value: object) -> object:
+    """Redact the value if the key name suggests a credential, else recurse into dicts."""
+    if _is_sensitive_key(key):
+        return "<redacted>"
+    if isinstance(value, dict):
+        return {k: _redact_config_value(k, v) for k, v in value.items()}
+    return value
+
+
+def _check_sensitive_empty(
+    data: dict[str, Any],
+    rel_toml: str,
+    category: str,
+) -> list[CheckResult]:
+    """Warn when a sensitive config key is set to an empty string."""
+    results: list[CheckResult] = []
+
+    def _walk(d: dict[str, Any], path: str) -> None:
+        for k, v in d.items():
+            key_path = f"{path}.{k}" if path else k
+            if isinstance(v, dict):
+                _walk(v, key_path)
+            elif _is_sensitive_key(k) and v == "":
+                results.append(
+                    CheckResult(
+                        f"plugin.{category}.config_empty_secret",
+                        "warn",
+                        f"{rel_toml}: {key_path} is empty (copy from .toml.example and fill in)",
+                        "plugin",
+                        path=rel_toml,
+                    )
+                )
+
+    _walk(data, "")
+    return results
+
+
 def format_effective_config(config: dict[str, Any]) -> str:
     """Format the effective configuration as a readable summary."""
     lines: list[str] = ["\n[effective config]"]
@@ -862,9 +908,11 @@ def format_effective_config(config: dict[str, Any]) -> str:
                 if isinstance(values, dict):
                     lines.append(f"      [{section}]")
                     for k, v in values.items():
-                        lines.append(f"        {k}: {v!r}")
+                        redacted = _redact_config_value(k, v)
+                        lines.append(f"        {k}: {redacted!r}")
                 else:
-                    lines.append(f"      {section}: {values!r}")
+                    redacted = _redact_config_value(section, values)
+                    lines.append(f"      {section}: {redacted!r}")
 
     return "\n".join(lines)
 

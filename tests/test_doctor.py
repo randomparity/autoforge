@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import patch
 
 from autoforge.agent.doctor import (
+    _check_sensitive_empty,
     check_campaign,
     check_optimization_branch,
     check_plugins,
@@ -446,3 +447,35 @@ class TestCheckOptimizationBranch:
         )
         assert exists_check is not None
         assert exists_check.status == "pass"
+
+
+class TestRedaction:
+    def test_format_effective_config_redacts_sensitive_keys(self) -> None:
+        config: dict[str, Any] = {
+            "project": "myproj",
+            "sprint": "2026-01-01-test",
+            "plugin_configs": {
+                "deploy/container-gpu.toml": {
+                    "deploy": {
+                        "env": {"HF_TOKEN": "hf_secret", "model": "Qwen/Qwen2-7B"},
+                    }
+                }
+            },
+        }
+        output = format_effective_config(config)
+        assert "hf_secret" not in output
+        assert "<redacted>" in output
+        assert "Qwen" in output
+
+    def test_check_sensitive_empty_warns_on_blank(self) -> None:
+        data: dict[str, Any] = {"deploy": {"env": {"HF_TOKEN": ""}}}
+        results = _check_sensitive_empty(data, "deploys/container-gpu.toml", "deploy")
+        assert len(results) == 1
+        assert results[0].status == "warn"
+        assert results[0].name == "plugin.deploy.config_empty_secret"
+        assert "HF_TOKEN" in results[0].message
+
+    def test_check_sensitive_empty_passes_when_filled(self) -> None:
+        data: dict[str, Any] = {"deploy": {"env": {"HF_TOKEN": "hf_real"}}}
+        results = _check_sensitive_empty(data, "deploys/container-gpu.toml", "deploy")
+        assert results == []
