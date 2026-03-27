@@ -1,8 +1,9 @@
-"""vLLM deployer — launch container with NVIDIA GPU passthrough via Podman."""
+"""vLLM deployer — launch container with NVIDIA GPU passthrough (Docker/Podman)."""
 
 from __future__ import annotations
 
 import logging
+import shutil
 import subprocess
 import time
 import urllib.error
@@ -18,13 +19,25 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class PodmanGpuDeployer:
-    """Deploys vLLM in a Podman container with GPU passthrough."""
+def _resolve_runtime(configured: str = "auto") -> str:
+    if configured and configured != "auto":
+        return configured
+    if shutil.which("docker"):
+        return "docker"
+    if shutil.which("podman"):
+        return "podman"
+    msg = "No container runtime found. Install docker or podman."
+    raise RuntimeError(msg)
 
-    name = "podman-gpu"
+
+class ContainerGpuDeployer:
+    """Deploys vLLM in a container with GPU passthrough (Docker or Podman)."""
+
+    name = "container-gpu"
 
     def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
         cfg = runner_config.get("deploy", {})
+        self._runtime = _resolve_runtime(cfg.get("runtime", "auto"))
         self._model = cfg.get("model", "Qwen/Qwen3-0.6B")
         self._port = int(cfg.get("port", 8000))
         self._container_name = cfg.get("container_name", "vllm-bench")
@@ -38,25 +51,31 @@ class PodmanGpuDeployer:
         image = build_result.artifacts.get("image", "localhost/vllm-bench:latest")
 
         subprocess.run(
-            ["podman", "rm", "-f", self._container_name],
+            [self._runtime, "rm", "-f", self._container_name],
             capture_output=True,
             timeout=30,
         )
 
         cmd = [
-            "podman",
+            self._runtime,
             "run",
             "-d",
             "--name",
             self._container_name,
-            "--device",
-            "nvidia.com/gpu=all",
-            "--ipc=host",
-            "-v",
-            f"{self._hf_cache}:/root/.cache/huggingface",
-            "-p",
-            f"{self._port}:8000",
         ]
+        if self._runtime == "docker":
+            cmd.extend(["--gpus", "all"])
+        else:
+            cmd.extend(["--device", "nvidia.com/gpu=all"])
+        cmd.extend(
+            [
+                "--ipc=host",
+                "-v",
+                f"{self._hf_cache}:/root/.cache/huggingface",
+                "-p",
+                f"{self._port}:8000",
+            ]
+        )
         for key, val in self._env_vars.items():
             cmd.extend(["--env", f"{key}={val}"])
         cmd.append(image)
@@ -82,7 +101,7 @@ class PodmanGpuDeployer:
 
             if not self._wait_healthy():
                 logs = subprocess.run(
-                    ["podman", "logs", "--tail", "50", self._container_name],
+                    [self._runtime, "logs", "--tail", "50", self._container_name],
                     capture_output=True,
                     text=True,
                     timeout=30,
@@ -104,12 +123,13 @@ class PodmanGpuDeployer:
                     "host": "localhost",
                     "port": self._port,
                     "model": self._model,
+                    "runtime": self._runtime,
                 },
             )
         except subprocess.CalledProcessError as exc:
             return DeployResult(success=False, error=exc.stderr[:500])
         except subprocess.TimeoutExpired:
-            return DeployResult(success=False, error="podman run timed out")
+            return DeployResult(success=False, error=f"{self._runtime} run timed out")
 
     def _wait_healthy(self) -> bool:
         url = f"http://localhost:{self._port}/health"

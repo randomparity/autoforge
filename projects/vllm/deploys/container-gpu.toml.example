@@ -1,4 +1,5 @@
 [deploy]
+runtime = "auto"                               # "auto", "docker", or "podman"
 model = "Qwen/Qwen3-0.6B"
 port = 8000
 container_name = "vllm-bench"

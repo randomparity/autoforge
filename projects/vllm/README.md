@@ -10,8 +10,9 @@ and the runner builds a container, deploys it with GPU passthrough, runs
 **Runner (GPU host):**
 
 - NVIDIA driver >= 525 with CUDA 12.x
-- Podman with [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
-  configured for CDI (`nvidia-ctk cdi generate`)
+- Docker or Podman with [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+  - Docker: install the toolkit and restart the Docker daemon
+  - Podman: configure CDI (`nvidia-ctk cdi generate`)
 - Python 3.13+, [uv](https://docs.astral.sh/uv/)
 
 **Agent (workstation):**
@@ -31,6 +32,10 @@ uv sync
 Verify GPU passthrough works:
 
 ```bash
+# Docker
+docker run --rm --gpus all docker.io/nvidia/cuda:12.8.0-base-ubuntu24.04 nvidia-smi
+
+# Podman
 podman run --rm --device nvidia.com/gpu=all docker.io/nvidia/cuda:12.8.0-base-ubuntu24.04 nvidia-smi
 ```
 
@@ -39,14 +44,14 @@ Copy and configure plugin configs:
 ```bash
 cp projects/vllm/runner.toml.example projects/vllm/runner.toml
 cp projects/vllm/builds/container.toml.example projects/vllm/builds/container.toml
-cp projects/vllm/deploys/podman-gpu.toml.example projects/vllm/deploys/podman-gpu.toml
+cp projects/vllm/deploys/container-gpu.toml.example projects/vllm/deploys/container-gpu.toml
 cp projects/vllm/tests/bench-serving.toml.example projects/vllm/tests/bench-serving.toml
 cp projects/vllm/perfs/nvidia-smi.toml.example projects/vllm/perfs/nvidia-smi.toml
 ```
 
 Edit each `.toml` file for your environment. At minimum:
 
-- `deploys/podman-gpu.toml` — set `model`, `hf_cache`, and `HF_TOKEN`
+- `deploys/container-gpu.toml` — set `model`, `hf_cache`, and `HF_TOKEN`
 - `runner.toml` — set `source_dir` if using source builds
 
 Pre-pull the model to avoid first-run delay:
@@ -89,23 +94,27 @@ uv run autoforge-loop --dry-run
 
 ### Builder (`container`)
 
-Builds a container image using Podman. Two modes:
+Builds a container image using Docker or Podman. Two modes:
 
 | Config key | Default | Description |
 |------------|---------|-------------|
+| `runtime` | `"auto"` | `"auto"` detects Docker then Podman; or set `"docker"` / `"podman"` |
 | `mode` | `"prebuilt"` | `"prebuilt"` pulls `base_image`; `"source"` builds from local source |
 | `base_image` | `docker.io/vllm/vllm-openai:latest` | Base image to pull or build from |
 | `local_tag` | `localhost/vllm-bench:latest` | Local tag for the built image |
 
-### Deployer (`podman-gpu`)
+### Deployer (`container-gpu`)
 
 Starts the vLLM container with GPU passthrough and waits for the health endpoint.
+Automatically selects the correct GPU flags: `--gpus all` for Docker,
+`--device nvidia.com/gpu=all` for Podman.
 
 | Config key | Default | Description |
 |------------|---------|-------------|
+| `runtime` | `"auto"` | `"auto"` detects Docker then Podman; or set `"docker"` / `"podman"` |
 | `model` | `Qwen/Qwen3-0.6B` | HuggingFace model ID |
 | `port` | `8000` | Host port for the OpenAI-compatible API |
-| `container_name` | `vllm-bench` | Podman container name |
+| `container_name` | `vllm-bench` | Container name |
 | `hf_cache` | `/home/user/.cache/huggingface` | Host path to HuggingFace cache (bind-mounted) |
 | `gpu_memory_utilization` | `0.90` | Fraction of GPU memory to use |
 | `startup_timeout` | `300` | Seconds to wait for health check |

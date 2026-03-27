@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -16,8 +17,19 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _resolve_runtime(configured: str = "auto") -> str:
+    if configured and configured != "auto":
+        return configured
+    if shutil.which("docker"):
+        return "docker"
+    if shutil.which("podman"):
+        return "podman"
+    msg = "No container runtime found. Install docker or podman."
+    raise RuntimeError(msg)
+
+
 class VllmContainerBuilder:
-    """Builds a vLLM container image via pull (prebuilt) or podman build (source)."""
+    """Builds a vLLM container image via pull or build (Docker/Podman)."""
 
     name = "container"
 
@@ -26,6 +38,7 @@ class VllmContainerBuilder:
         self._mode = cfg.get("mode", "prebuilt")
         self._base_image = cfg.get("base_image", "docker.io/vllm/vllm-openai:latest")
         self._local_tag = cfg.get("local_tag", "localhost/vllm-bench:latest")
+        self._runtime = _resolve_runtime(cfg.get("runtime", "auto"))
 
     def build(
         self,
@@ -42,21 +55,21 @@ class VllmContainerBuilder:
     def _build_prebuilt(self, start: float, timeout: int) -> BuildResult:
         try:
             result = subprocess.run(
-                ["podman", "pull", self._base_image],
+                [self._runtime, "pull", self._base_image],
                 capture_output=True,
                 text=True,
                 timeout=timeout,
             )
             elapsed = time.monotonic() - start
             if result.returncode != 0:
-                logger.error("podman pull failed: %s", result.stderr.strip())
+                logger.error("%s pull failed: %s", self._runtime, result.stderr.strip())
                 return BuildResult(
                     success=False,
                     log=result.stderr[-2000:],
                     duration_seconds=elapsed,
                 )
             subprocess.run(
-                ["podman", "tag", self._base_image, self._local_tag],
+                [self._runtime, "tag", self._base_image, self._local_tag],
                 check=True,
                 capture_output=True,
                 timeout=30,
@@ -90,12 +103,11 @@ class VllmContainerBuilder:
                 capture_output=True,
                 timeout=30,
             )
-            result = subprocess.run(
+            cmd = [self._runtime, "build"]
+            if self._runtime == "podman":
+                cmd.extend(["--security-opt", "label=disable"])
+            cmd.extend(
                 [
-                    "podman",
-                    "build",
-                    "--security-opt",
-                    "label=disable",
                     "--build-arg",
                     "VLLM_USE_PRECOMPILED=1",
                     "-t",
@@ -103,14 +115,17 @@ class VllmContainerBuilder:
                     "-f",
                     str(source_path / "Dockerfile"),
                     str(source_path),
-                ],
+                ]
+            )
+            result = subprocess.run(
+                cmd,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
             )
             elapsed = time.monotonic() - start
             if result.returncode != 0:
-                logger.error("podman build failed (exit %d)", result.returncode)
+                logger.error("%s build failed (exit %d)", self._runtime, result.returncode)
                 return BuildResult(
                     success=False,
                     log=result.stderr[-2000:],

@@ -1,3 +1,6 @@
 [submodule "dpdk"]
 	path = projects/dpdk/repo
 	url = git@github.com:randomparity/dpdk.git
+[submodule "projects/vllm/repo"]
+	path = projects/vllm/repo
+	url = https://github.com/randomparity/vllm

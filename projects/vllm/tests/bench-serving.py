@@ -53,6 +53,7 @@ class VllmServingBenchTester:
         port = deploy_result.target_info.get("port", 8000)
         model = deploy_result.target_info.get("model", "unknown")
         container = deploy_result.target_info.get("container_name", "vllm-bench")
+        runtime = deploy_result.target_info.get("runtime", "docker")
 
         self._result_dir.mkdir(parents=True, exist_ok=True)
         result_file = self._result_dir / "result.json"
@@ -134,7 +135,7 @@ class VllmServingBenchTester:
             )
         finally:
             subprocess.run(
-                ["podman", "rm", "-f", container],
+                [runtime, "rm", "-f", container],
                 capture_output=True,
                 timeout=30,
             )

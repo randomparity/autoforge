@@ -39,9 +39,9 @@ class TestProtocolConformance:
         assert comp.name == "container"
 
     def test_deployer_conforms(self) -> None:
-        comp = load_component("vllm", "deploy", "podman-gpu")
+        comp = load_component("vllm", "deploy", "container-gpu")
         assert isinstance(comp, Deployer)
-        assert comp.name == "podman-gpu"
+        assert comp.name == "container-gpu"
 
     def test_tester_conforms(self) -> None:
         comp = load_component("vllm", "test", "bench-serving")
@@ -91,7 +91,7 @@ class TestVllmContainerBuilder:
 
     @patch("subprocess.run")
     def test_prebuilt_timeout(self, mock_run: MagicMock) -> None:
-        mock_run.side_effect = subprocess.TimeoutExpired(cmd="podman pull", timeout=300)
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="pull", timeout=300)
         builder = self._make_builder("prebuilt")
         result = builder.build(Path("/src"), "abc123", Path("/build"), 300)
         assert not result.success
@@ -108,7 +108,7 @@ class TestVllmContainerBuilder:
 
     @patch("subprocess.run")
     def test_source_build_failure(self, mock_run: MagicMock) -> None:
-        # First call (git checkout) succeeds, second (podman build) fails
+        # First call (git checkout) succeeds, second (build) fails
         mock_run.side_effect = [
             _make_completed(0),
             _make_completed(1, stderr="build error"),
@@ -123,9 +123,10 @@ class TestVllmContainerBuilder:
 # ---------------------------------------------------------------------------
 
 
-class TestPodmanGpuDeployer:
-    def _make_deployer(self, **overrides: Any) -> Any:
+class TestContainerGpuDeployer:
+    def _make_deployer(self, runtime: str = "podman", **overrides: Any) -> Any:
         cfg: dict[str, Any] = {
+            "runtime": runtime,
             "model": "test-model",
             "port": 9000,
             "container_name": "test-vllm",
@@ -137,7 +138,7 @@ class TestPodmanGpuDeployer:
         comp = load_component(
             "vllm",
             "deploy",
-            "podman-gpu",
+            "container-gpu",
             project_config={},
             runner_config={"deploy": cfg},
         )
@@ -163,10 +164,10 @@ class TestPodmanGpuDeployer:
         assert result.target_info["model"] == "test-model"
 
     @patch("subprocess.run")
-    def test_deploy_podman_run_fails(self, mock_run: MagicMock) -> None:
+    def test_deploy_run_fails(self, mock_run: MagicMock) -> None:
         mock_run.side_effect = [
             _make_completed(0),  # rm -f
-            subprocess.CalledProcessError(1, "podman run", stderr="gpu error"),
+            subprocess.CalledProcessError(1, "run", stderr="gpu error"),
         ]
         deployer = self._make_deployer()
         build_result = BuildResult(
@@ -197,6 +198,69 @@ class TestPodmanGpuDeployer:
         assert not result.success
         assert "healthy" in (result.error or "").lower()
 
+    @patch("urllib.request.urlopen")
+    @patch("subprocess.run")
+    def test_docker_uses_gpus_all(self, mock_run: MagicMock, mock_urlopen: MagicMock) -> None:
+        mock_run.return_value = _make_completed(0, stdout="container123")
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        deployer = self._make_deployer(runtime="docker")
+        build_result = BuildResult(
+            success=True, log="ok", duration_seconds=1.0, artifacts={"image": "test:latest"}
+        )
+        deployer.deploy(build_result)
+
+        run_call = mock_run.call_args_list[1]  # second call is 'docker run'
+        cmd = run_call.args[0] if run_call.args else run_call.kwargs.get("args", [])
+        assert "--gpus" in cmd
+        assert "all" in cmd
+        assert "--device" not in cmd
+
+    @patch("urllib.request.urlopen")
+    @patch("subprocess.run")
+    def test_podman_uses_device_nvidia(self, mock_run: MagicMock, mock_urlopen: MagicMock) -> None:
+        mock_run.return_value = _make_completed(0, stdout="container123")
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        deployer = self._make_deployer(runtime="podman")
+        build_result = BuildResult(
+            success=True, log="ok", duration_seconds=1.0, artifacts={"image": "test:latest"}
+        )
+        deployer.deploy(build_result)
+
+        run_call = mock_run.call_args_list[1]
+        cmd = run_call.args[0] if run_call.args else run_call.kwargs.get("args", [])
+        assert "--device" in cmd
+        assert "nvidia.com/gpu=all" in cmd
+        assert "--gpus" not in cmd
+
+    @patch("urllib.request.urlopen")
+    @patch("subprocess.run")
+    def test_runtime_in_target_info(self, mock_run: MagicMock, mock_urlopen: MagicMock) -> None:
+        mock_run.return_value = _make_completed(0, stdout="cid")
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+        mock_urlopen.return_value = mock_resp
+
+        for rt in ("docker", "podman"):
+            deployer = self._make_deployer(runtime=rt)
+            build_result = BuildResult(
+                success=True, log="ok", duration_seconds=1.0, artifacts={"image": "img"}
+            )
+            result = deployer.deploy(build_result)
+            assert result.success
+            assert result.target_info["runtime"] == rt
+
 
 # ---------------------------------------------------------------------------
 # Tester tests
@@ -220,7 +284,7 @@ class TestVllmServingBenchTester:
         )
         return comp
 
-    def _deploy_result(self) -> DeployResult:
+    def _deploy_result(self, runtime: str = "podman") -> DeployResult:
         return DeployResult(
             success=True,
             target_info={
@@ -228,6 +292,7 @@ class TestVllmServingBenchTester:
                 "port": 8000,
                 "model": "test-model",
                 "container_name": "test-ctr",
+                "runtime": runtime,
             },
         )
 
@@ -299,6 +364,19 @@ class TestVllmServingBenchTester:
             c for c in mock_run.call_args_list if "rm" in str(c) and "test-ctr" in str(c)
         ]
         assert len(teardown_calls) >= 1
+
+    @patch("subprocess.run")
+    def test_teardown_uses_runtime_from_target_info(self, mock_run: MagicMock) -> None:
+        """Teardown uses the runtime from deploy_result.target_info."""
+        mock_run.return_value = _make_completed(0, stdout="done")
+        tester = self._make_tester()
+        tester.test(self._deploy_result(runtime="docker"), timeout=60)
+        teardown_calls = [
+            c for c in mock_run.call_args_list if "rm" in str(c) and "test-ctr" in str(c)
+        ]
+        assert len(teardown_calls) >= 1
+        teardown_cmd = teardown_calls[0].args[0]
+        assert teardown_cmd[0] == "docker"
 
 
 # ---------------------------------------------------------------------------

@@ -4,7 +4,7 @@ log_level = "info"
 poll_interval = 30
 
 [paths]
-source_dir = "/home/user/src/vllm"   # only needed for source builds
+source_dir = "projects/vllm/repo"    # vLLM submodule; only needed for source builds
 build_dir = "/tmp/vllm-build"
 
 [timeouts]
