@@ -169,6 +169,42 @@ class VllmContainerBuilder:
 
         logger.info("Patched Dockerfile: removed .git mounts, set version=%s", version)
 
+    @staticmethod
+    def _get_precompiled_base_commit(source_path: Path, commit: str) -> str:
+        """Find the upstream merge-base commit for precompiled wheel download.
+
+        When building from a local optimization branch, the commit is a custom
+        hash with no published precompiled wheels. Use the merge-base with the
+        upstream main branch so the Dockerfile downloads wheels from a commit
+        that actually has them published.
+        """
+        # Ensure we have up-to-date remote refs.
+        subprocess.run(
+            ["git", "fetch", "origin", "main"],
+            cwd=source_path,
+            capture_output=True,
+            timeout=60,
+        )
+        for upstream_ref in ("origin/main", "upstream/main", "main"):
+            result = subprocess.run(
+                ["git", "merge-base", upstream_ref, commit],
+                cwd=source_path,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                base = result.stdout.strip()
+                if base != commit:
+                    logger.info(
+                        "Using upstream merge-base %s for precompiled wheels (commit: %s, ref: %s)",
+                        base[:12],
+                        commit[:12],
+                        upstream_ref,
+                    )
+                    return base
+        return commit
+
     def _build_from_source(
         self,
         source_path: Path,
@@ -188,6 +224,10 @@ class VllmContainerBuilder:
             version = self._get_scm_version(source_path)
             self._patch_dockerfile_for_submodule(source_path, version)
 
+            # Use upstream merge-base for precompiled wheels when building
+            # from an optimization branch.
+            precompiled_commit = self._get_precompiled_base_commit(source_path, commit)
+
             cmd = [self._runtime, "build"]
             if self._runtime == "podman":
                 cmd.extend(["--security-opt", "label=disable"])
@@ -196,7 +236,7 @@ class VllmContainerBuilder:
                     "--build-arg",
                     "VLLM_USE_PRECOMPILED=1",
                     "--build-arg",
-                    f"VLLM_MERGE_BASE_COMMIT={commit}",
+                    f"VLLM_MERGE_BASE_COMMIT={precompiled_commit}",
                     "-t",
                     self._local_tag,
                     "-f",
