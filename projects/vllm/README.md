@@ -34,7 +34,48 @@ uv run autoforge sprint list
 
 - Python 3.13+, uv, huggingface-cli
 
+## Agent setup (workstation)
+
+Switch to the vLLM project and initialize a sprint:
+
+```bash
+uv run autoforge project switch vllm
+uv run autoforge sprint init 2026-03-26-baseline
+```
+
+Commit and push the pointer update so the runner can pull it:
+
+```bash
+git add .autoforge.toml
+git commit -m "chore: switch to vllm/2026-03-26-baseline"
+git push
+```
+
+Verify the configuration is complete:
+
+```bash
+uv run autoforge doctor
+```
+
+Start optimizing:
+
+```bash
+uv run autoforge context          # show current state
+uv run autoforge submit -d "baseline run"
+uv run autoforge poll             # wait for results
+uv run autoforge judge            # keep or revert
+```
+
+Or use the interactive loop:
+
+```bash
+uv run autoforge-loop --dry-run
+```
+
 ## Runner setup (GPU host)
+
+> Complete agent setup first — the agent commits `.autoforge.toml` which the
+> runner reads at startup.
 
 Clone the repo and install dependencies:
 
@@ -43,6 +84,9 @@ git clone --recurse-submodules <repo-url> autoforge
 cd autoforge
 uv sync
 ```
+
+The active project and sprint are set by the agent and committed to
+`.autoforge.toml`. Clone the repo to pick them up automatically.
 
 Verify GPU passthrough works:
 
@@ -69,17 +113,6 @@ Edit each `.toml` file for your environment. At minimum:
 - `deploys/container-gpu.toml` — set `model`, `hf_cache`, and `HF_TOKEN`
 - `runner.toml` — set `source_dir` if using source builds
 
-Point the repo at the vLLM project and sprint (the runner reads `.autoforge.toml`
-to know which project and sprint to poll):
-
-```bash
-uv run autoforge project switch vllm
-uv run autoforge sprint list
-<YYYY-MM-DD-sprint-name-1>
-<YYYY-MM-DD-sprint-name-2>
-uv run autoforge sprint switch <sprint-name>
-```
-
 Verify the configuration file is complete, investigate any warning/fail messages displayed.
 
 ```bash
@@ -96,36 +129,6 @@ Start the runner:
 
 ```bash
 uv run autoforge-runner
-```
-
-## Agent setup (workstation)
-
-Switch to the vLLM project and initialize a sprint:
-
-```bash
-uv run autoforge project switch vllm
-uv run autoforge sprint init 2026-03-26-baseline
-```
-
-Verify the configuration is complete:
-
-```bash
-uv run autoforge doctor
-```
-
-Start optimizing:
-
-```bash
-uv run autoforge context          # show current state
-uv run autoforge submit -d "baseline run"
-uv run autoforge poll             # wait for results
-uv run autoforge judge            # keep or revert
-```
-
-Or use the interactive loop:
-
-```bash
-uv run autoforge-loop --dry-run
 ```
 
 ## Plugins
