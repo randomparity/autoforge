@@ -441,7 +441,7 @@ def cmd_project_init(name: str) -> None:
     print("  builds/  deploys/  tests/  perfs/  judges/  sprints/")
 
 
-def cmd_sprint_list(campaign: CampaignConfig) -> None:
+def cmd_sprint_list() -> None:
     """List all sprints with summary."""
     sprints = list_sprints()
     if not sprints:
@@ -461,7 +461,7 @@ def cmd_sprint_list(campaign: CampaignConfig) -> None:
         print(f"{marker} {s['name']:40s} {label:10s} {s['iterations']:3d} iterations, best: {best}")
 
 
-def cmd_sprint_active(campaign: CampaignConfig) -> None:
+def cmd_sprint_active() -> None:
     """Print the active sprint name."""
     try:
         print(active_sprint_name())
@@ -594,9 +594,17 @@ def _dispatch(args: argparse.Namespace) -> None:
     campaign_path = Path(args.campaign) if args.campaign else None
 
     # Commands that don't need campaign loaded
-    if args.command == "sprint" and args.sprint_command == "init":
-        template = Path(args.template) if args.template else None
-        cmd_sprint_init(args.name, template=template, from_sprint=args.from_sprint)
+    if args.command == "sprint":
+        if args.sprint_command == "init":
+            template = Path(args.template) if args.template else None
+            cmd_sprint_init(args.name, template=template, from_sprint=args.from_sprint)
+        elif args.sprint_command == "list":
+            cmd_sprint_list()
+        elif args.sprint_command == "active":
+            cmd_sprint_active()
+        elif args.sprint_command == "switch":
+            switch_sprint(args.name)
+            print(f"Switched to sprint: {args.name}")
         return
 
     if args.command == "project":
@@ -635,15 +643,7 @@ def _dispatch(args: argparse.Namespace) -> None:
 
     campaign = load_campaign(resolve_campaign_path(campaign_path))
 
-    if args.command == "sprint":
-        if args.sprint_command == "list":
-            cmd_sprint_list(campaign)
-        elif args.sprint_command == "active":
-            cmd_sprint_active(campaign)
-        elif args.sprint_command == "switch":
-            switch_sprint(args.name)
-            print(f"Switched to sprint: {args.name}")
-    elif args.command == "hints":
+    if args.command == "hints":
         cmd_hints(campaign, args.arch, args.topic, args.list_topics)
     elif args.command == "context":
         cmd_context(campaign)

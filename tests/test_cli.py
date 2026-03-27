@@ -91,7 +91,7 @@ class TestCmdSprintInit:
 class TestCmdSprintList:
     def test_no_sprints(self, capsys: pytest.CaptureFixture) -> None:
         with patch("autoforge.agent.cli.list_sprints", return_value=[]):
-            cmd_sprint_list(SAMPLE_CAMPAIGN)
+            cmd_sprint_list()
 
         captured = capsys.readouterr()
         assert "No sprints found" in captured.out
@@ -105,7 +105,7 @@ class TestCmdSprintList:
             patch("autoforge.agent.cli.list_sprints", return_value=sprints),
             patch("autoforge.agent.cli.active_sprint_name", return_value="2026-01-01-test"),
         ):
-            cmd_sprint_list(SAMPLE_CAMPAIGN)
+            cmd_sprint_list()
 
         captured = capsys.readouterr()
         assert "2026-01-01-test" in captured.out
@@ -117,12 +117,11 @@ class TestCmdSprintList:
 class TestCmdSprintActive:
     def test_active_sprint(self, capsys: pytest.CaptureFixture) -> None:
         with patch("autoforge.agent.cli.active_sprint_name", return_value="2026-01-01-test"):
-            cmd_sprint_active(SAMPLE_CAMPAIGN)
+            cmd_sprint_active()
         captured = capsys.readouterr()
         assert "2026-01-01-test" in captured.out
 
     def test_no_active_sprint(self) -> None:
-        campaign: dict = {"campaign": {"name": "test"}}
         with (
             patch(
                 "autoforge.agent.cli.active_sprint_name",
@@ -130,7 +129,7 @@ class TestCmdSprintActive:
             ),
             pytest.raises(SystemExit, match="1"),
         ):
-            cmd_sprint_active(campaign)
+            cmd_sprint_active()
 
 
 class TestCmdRevert:
