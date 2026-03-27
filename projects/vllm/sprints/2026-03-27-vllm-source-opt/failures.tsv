@@ -42,3 +42,5 @@ timestamp	source_commit	metric_value	description	diff_summary
  1 file changed, 1 insertion(+), 1 deletion(-)"
 2026-03-27T23:34:16.590366+00:00	23a20b981f37f0de44903509fa779df1a12da230	2420.1085259473243	no prefix cache (keep trying)	"vllm/config/cache.py | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-27T23:38:02.106259+00:00	99f89f24bc3b2cc8b33f2d4f8218a3f5e0e24705	2378.6069797857917	no prefix cache	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
