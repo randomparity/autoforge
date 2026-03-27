@@ -178,7 +178,7 @@ class VllmContainerBuilder:
     ) -> BuildResult:
         try:
             subprocess.run(
-                ["git", "checkout", commit],
+                ["git", "checkout", "--force", commit],
                 cwd=source_path,
                 check=True,
                 capture_output=True,
