@@ -6,3 +6,4 @@ runtime = "auto"                               # "auto", "docker", or "podman"
 mode = "source"                                # "prebuilt" or "source"
 base_image = "docker.io/vllm/vllm-openai:latest"
 local_tag = "localhost/vllm-bench:latest"
+dockerfile = "docker/Dockerfile"              # relative to source repo root

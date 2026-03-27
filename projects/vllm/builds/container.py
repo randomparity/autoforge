@@ -38,6 +38,7 @@ class VllmContainerBuilder:
         self._mode = cfg.get("mode", "prebuilt")
         self._base_image = cfg.get("base_image", "docker.io/vllm/vllm-openai:latest")
         self._local_tag = cfg.get("local_tag", "localhost/vllm-bench:latest")
+        self._dockerfile = cfg.get("dockerfile", "Dockerfile")
         self._runtime = _resolve_runtime(cfg.get("runtime", "auto"))
 
     def build(
@@ -113,7 +114,7 @@ class VllmContainerBuilder:
                     "-t",
                     self._local_tag,
                     "-f",
-                    str(source_path / "Dockerfile"),
+                    str(source_path / self._dockerfile),
                     str(source_path),
                 ]
             )
