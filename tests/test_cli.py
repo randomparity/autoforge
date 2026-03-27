@@ -15,6 +15,7 @@ from autoforge.agent.cli import (
     cmd_sprint_active,
     cmd_sprint_init,
     cmd_sprint_list,
+    main,
 )
 from autoforge.agent.git_ops import DirtyWorkingTreeError, check_git_clean
 
@@ -342,3 +343,71 @@ class TestCmdJudge:
         assert "always-keep" in out
         assert "keep" in out
         assert "test keep" in out
+
+
+class TestProjectListCommand:
+    def test_no_projects(self, capsys: pytest.CaptureFixture) -> None:
+        with (
+            patch("autoforge.agent.cli.list_projects", return_value=[]),
+            patch("autoforge.agent.cli.load_pointer", return_value=SAMPLE_POINTER),
+            patch("sys.argv", ["autoforge", "project", "list"]),
+        ):
+            main()
+
+        assert "No projects found" in capsys.readouterr().out
+
+    def test_lists_projects_with_active_marker(self, capsys: pytest.CaptureFixture) -> None:
+        with (
+            patch("autoforge.agent.cli.list_projects", return_value=["dpdk", "vllm"]),
+            patch("autoforge.agent.cli.load_pointer", return_value=SAMPLE_POINTER),
+            patch("sys.argv", ["autoforge", "project", "list"]),
+        ):
+            main()
+
+        out = capsys.readouterr().out
+        assert " * dpdk" in out
+        assert "   vllm" in out
+
+    def test_no_active_project_still_lists(self, capsys: pytest.CaptureFixture) -> None:
+        with (
+            patch("autoforge.agent.cli.list_projects", return_value=["dpdk"]),
+            patch("autoforge.agent.cli.load_pointer", side_effect=FileNotFoundError),
+            patch("sys.argv", ["autoforge", "project", "list"]),
+        ):
+            main()
+
+        assert "dpdk" in capsys.readouterr().out
+
+
+class TestProjectSwitchCommand:
+    def test_success_prints_confirmation(self, capsys: pytest.CaptureFixture) -> None:
+        with (
+            patch("autoforge.agent.cli.switch_project") as mock_switch,
+            patch("sys.argv", ["autoforge", "project", "switch", "vllm"]),
+        ):
+            main()
+
+        mock_switch.assert_called_once_with("vllm")
+        assert "Switched to project: vllm" in capsys.readouterr().out
+
+    def test_nonexistent_project_exits(self) -> None:
+        with (
+            patch(
+                "autoforge.agent.cli.switch_project",
+                side_effect=FileNotFoundError("Project not found"),
+            ),
+            patch("sys.argv", ["autoforge", "project", "switch", "nonexistent"]),
+            pytest.raises(SystemExit, match="1"),
+        ):
+            main()
+
+    def test_invalid_name_exits(self) -> None:
+        with (
+            patch(
+                "autoforge.agent.cli.switch_project",
+                side_effect=ValueError("Invalid project name"),
+            ),
+            patch("sys.argv", ["autoforge", "project", "switch", "Bad Name"]),
+            pytest.raises(SystemExit, match="1"),
+        ):
+            main()

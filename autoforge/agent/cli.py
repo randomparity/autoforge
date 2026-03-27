@@ -24,7 +24,7 @@ from autoforge.agent.history import (
     load_history,
 )
 from autoforge.agent.judge import apply_judge_verdict
-from autoforge.agent.project import init_project
+from autoforge.agent.project import init_project, list_projects, switch_project
 from autoforge.agent.protocol import (
     create_request,
     find_latest_request,
@@ -58,6 +58,7 @@ from autoforge.campaign import (
     resolve_campaign_path,
     submodule_path,
 )
+from autoforge.pointer import load_pointer
 from autoforge.protocol import Direction, TestRequest
 
 
@@ -574,6 +575,11 @@ def main() -> None:
     project_init_p = project_sub.add_parser("init", help="Create a new project")
     project_init_p.add_argument("name", help="Project name (lowercase alphanumeric + hyphens)")
 
+    project_sub.add_parser("list", help="List all projects")
+
+    project_switch_p = project_sub.add_parser("switch", help="Switch the active project")
+    project_switch_p.add_argument("name", help="Project name to switch to")
+
     args = parser.parse_args()
 
     try:
@@ -594,8 +600,28 @@ def _dispatch(args: argparse.Namespace) -> None:
         return
 
     if args.command == "project":
-        if args.project_command == "init":
+        if args.project_command == "list":
+            try:
+                active = load_pointer().get("project")
+            except (FileNotFoundError, KeyError):
+                active = None
+            projects = list_projects()
+            if not projects:
+                print("No projects found.")
+            else:
+                print("Projects:")
+                for p in projects:
+                    marker = " *" if p == active else "  "
+                    print(f"{marker} {p}")
+        elif args.project_command == "init":
             cmd_project_init(args.name)
+        elif args.project_command == "switch":
+            try:
+                switch_project(args.name)
+            except (ValueError, FileNotFoundError) as exc:
+                print(f"ERROR: {exc}")
+                sys.exit(1)
+            print(f"Switched to project: {args.name}")
         return
 
     if args.command == "doctor":

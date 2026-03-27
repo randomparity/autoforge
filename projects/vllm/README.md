@@ -5,6 +5,21 @@ hardware. The agent proposes engine configuration changes or source patches,
 and the runner builds a container, deploys it with GPU passthrough, runs
 `vllm bench serve`, and reports output token throughput.
 
+## Switching to this project
+
+If another project is currently active, switch to vLLM and select a sprint:
+
+```bash
+uv run autoforge project switch vllm
+uv run autoforge sprint switch <sprint-name>   # e.g. 2026-03-26-baseline
+```
+
+To see available sprints:
+
+```bash
+uv run autoforge sprint list
+```
+
 ## Prerequisites
 
 **Runner (GPU host):**
@@ -54,12 +69,12 @@ Edit each `.toml` file for your environment. At minimum:
 - `deploys/container-gpu.toml` — set `model`, `hf_cache`, and `HF_TOKEN`
 - `runner.toml` — set `source_dir` if using source builds
 
-Point the repo at the vLLM project by editing `.autoforge.toml` at the repo
-root (the runner reads this to know which project and sprint to poll):
+Point the repo at the vLLM project and sprint (the runner reads `.autoforge.toml`
+to know which project and sprint to poll):
 
-```toml
-project = "vllm"
-sprint = "<sprint-name>"
+```bash
+uv run autoforge project switch vllm
+uv run autoforge sprint switch <sprint-name>
 ```
 
 Pre-pull the model to avoid first-run delay:
@@ -76,16 +91,10 @@ uv run autoforge-runner
 
 ## Agent setup (workstation)
 
-Set the active project in `.autoforge.toml` at the repo root, then initialize
-a sprint (`sprint init` reads the project from the pointer and saves the new
-sprint name back to it):
-
-```toml
-project = "vllm"
-sprint = ""
-```
+Switch to the vLLM project and initialize a sprint:
 
 ```bash
+uv run autoforge project switch vllm
 uv run autoforge sprint init 2026-03-26-baseline
 ```
 

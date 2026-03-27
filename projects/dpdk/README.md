@@ -5,6 +5,21 @@ proposes source changes to a DPDK submodule, and the runner builds with
 meson/ninja, deploys locally, runs testpmd (memif or PCI) or DTS, and reports
 throughput in millions of packets per second (Mpps).
 
+## Switching to this project
+
+If another project is currently active, switch to DPDK and select a sprint:
+
+```bash
+uv run autoforge project switch dpdk
+uv run autoforge sprint switch <sprint-name>   # e.g. 2026-03-26-memif-ppc64le
+```
+
+To see available sprints:
+
+```bash
+uv run autoforge sprint list
+```
+
 ## Prerequisites
 
 **Runner (lab machine):**
