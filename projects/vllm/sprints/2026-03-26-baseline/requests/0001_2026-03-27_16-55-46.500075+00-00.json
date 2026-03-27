@@ -10,11 +10,11 @@
   "tags": null,
   "metric_name": "output_throughput",
   "metric_path": "output_throughput",
-  "status": "deploying",
+  "status": "failed",
   "claimed_at": "2026-03-27T16:55:55.961445+00:00",
   "built_at": null,
   "deployed_at": null,
-  "completed_at": null,
+  "completed_at": "2026-03-27T16:59:03.501825+00:00",
   "build_runner_id": null,
   "deploy_runner_id": null,
   "test_runner_id": null,
@@ -22,5 +22,5 @@
   "results_json": null,
   "results_summary": null,
   "metric_value": null,
-  "error": null
+  "error": "runner restarted"
 }
