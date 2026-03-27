@@ -10,3 +10,4 @@ sequence	timestamp	source_commit	metric_value	status	description	tags
 21	2026-03-27T22:19:12.414122+00:00	12da554b90e68d6eeeccf5a95c2d43d486cfd2c8	2397.064897631421	completed	inline single-token append + max_num_batched_tokens=8192
 22	2026-03-27T22:24:12.767705+00:00	b7e592d397049ac1f2dbfa420a533fd86050b23a	2401.2556068019185	completed	disable stats logging + max_num_batched_tokens=8192
 23	2026-03-27T22:31:36.980076+00:00	c560a08f8dd76217f09dd0c8db396f9eb3026d4b	2414.636093402219	completed	disable prefix caching + max_num_batched_tokens=8192
+24	2026-03-27T22:38:16.713847+00:00	a9b42deba5a4245f6f099cdc3ea8be6a5099fcc4	2404.8999860518843	completed	repeat: batch=8192 + no prefix caching
