@@ -27,3 +27,6 @@ timestamp	source_commit	metric_value	description	diff_summary
  2 files changed, 3 insertions(+), 3 deletions(-)"
 2026-03-27T22:58:26.071777+00:00	0bf54d824b75adb427f90dcb4b0cc3888662c319	2405.948287226925	batch=8192 + no prefix cache (attempt for higher peak)	"vllm/config/cache.py | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-27T23:07:07.196960+00:00	6a96012bb238b1441932897a0d9e94a467389731	2344.1457253915187	batch=8192 + no prefix cache + no stats (retry)	"vllm/config/cache.py     | 2 +-
+ vllm/engine/arg_utils.py | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)"
