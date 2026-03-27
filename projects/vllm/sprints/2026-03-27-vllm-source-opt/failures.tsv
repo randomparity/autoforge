@@ -1,0 +1,7 @@
+timestamp	source_commit	metric_value	description	diff_summary
+2026-03-27T20:10:12.932558+00:00	bcf2be96120005e9aea171927f85055a6a5c0cf6	2385.181648976968	Baseline: unmodified vllm	".buildkite/test_areas/lm_eval.yaml                       | 16 ++++++++++++++++
+ tests/evals/gsm8k/configs/Qwen3.5-35B-A3B-DEP2.yaml      |  8 ++++++++
+ tests/evals/gsm8k/configs/Qwen3.5-35B-A3B-FP8-DEP2.yaml  |  9 +++++++++
+ tests/evals/gsm8k/configs/models-qwen35-blackwell.txt    |  2 ++
+ .../layers/fused_moe/experts/trtllm_fp8_moe.py           | 12 +++++++-----
+ 5 files changed, 42 insertions(+), 5 deletions(-)"
