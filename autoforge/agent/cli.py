@@ -24,7 +24,7 @@ from autoforge.agent.history import (
     load_history,
 )
 from autoforge.agent.judge import apply_judge_verdict
-from autoforge.agent.project import init_project
+from autoforge.agent.project import init_project, list_projects, switch_project
 from autoforge.agent.protocol import (
     create_request,
     find_latest_request,
@@ -55,9 +55,11 @@ from autoforge.campaign import (
     metric_direction,
     optimization_branch,
     platform_arch,
+    project_name,
     resolve_campaign_path,
     submodule_path,
 )
+from autoforge.pointer import load_pointer
 from autoforge.protocol import Direction, TestRequest
 
 
@@ -271,7 +273,7 @@ def cmd_baseline(campaign: CampaignConfig, dry_run: bool) -> None:
     req = requests_dir()
     commit = git_submodule_head(source_path)
     seq = next_sequence(req)
-    description = "Baseline: unmodified DPDK"
+    description = f"Baseline: unmodified {project_name(campaign)}"
 
     request_path = create_request(seq, commit, campaign, description, req)
     git_add_commit_push(
@@ -440,7 +442,7 @@ def cmd_project_init(name: str) -> None:
     print("  builds/  deploys/  tests/  perfs/  judges/  sprints/")
 
 
-def cmd_sprint_list(campaign: CampaignConfig) -> None:
+def cmd_sprint_list() -> None:
     """List all sprints with summary."""
     sprints = list_sprints()
     if not sprints:
@@ -460,7 +462,7 @@ def cmd_sprint_list(campaign: CampaignConfig) -> None:
         print(f"{marker} {s['name']:40s} {label:10s} {s['iterations']:3d} iterations, best: {best}")
 
 
-def cmd_sprint_active(campaign: CampaignConfig) -> None:
+def cmd_sprint_active() -> None:
     """Print the active sprint name."""
     try:
         print(active_sprint_name())
@@ -574,6 +576,11 @@ def main() -> None:
     project_init_p = project_sub.add_parser("init", help="Create a new project")
     project_init_p.add_argument("name", help="Project name (lowercase alphanumeric + hyphens)")
 
+    project_sub.add_parser("list", help="List all projects")
+
+    project_switch_p = project_sub.add_parser("switch", help="Switch the active project")
+    project_switch_p.add_argument("name", help="Project name to switch to")
+
     args = parser.parse_args()
 
     try:
@@ -588,14 +595,42 @@ def _dispatch(args: argparse.Namespace) -> None:
     campaign_path = Path(args.campaign) if args.campaign else None
 
     # Commands that don't need campaign loaded
-    if args.command == "sprint" and args.sprint_command == "init":
-        template = Path(args.template) if args.template else None
-        cmd_sprint_init(args.name, template=template, from_sprint=args.from_sprint)
+    if args.command == "sprint":
+        if args.sprint_command == "init":
+            template = Path(args.template) if args.template else None
+            cmd_sprint_init(args.name, template=template, from_sprint=args.from_sprint)
+        elif args.sprint_command == "list":
+            cmd_sprint_list()
+        elif args.sprint_command == "active":
+            cmd_sprint_active()
+        elif args.sprint_command == "switch":
+            switch_sprint(args.name)
+            print(f"Switched to sprint: {args.name}")
         return
 
     if args.command == "project":
-        if args.project_command == "init":
+        if args.project_command == "list":
+            try:
+                active = load_pointer().get("project")
+            except (FileNotFoundError, KeyError):
+                active = None
+            projects = list_projects()
+            if not projects:
+                print("No projects found.")
+            else:
+                print("Projects:")
+                for p in projects:
+                    marker = " *" if p == active else "  "
+                    print(f"{marker} {p}")
+        elif args.project_command == "init":
             cmd_project_init(args.name)
+        elif args.project_command == "switch":
+            try:
+                switch_project(args.name)
+            except (ValueError, FileNotFoundError) as exc:
+                print(f"ERROR: {exc}")
+                sys.exit(1)
+            print(f"Switched to project: {args.name}")
         return
 
     if args.command == "doctor":
@@ -609,15 +644,7 @@ def _dispatch(args: argparse.Namespace) -> None:
 
     campaign = load_campaign(resolve_campaign_path(campaign_path))
 
-    if args.command == "sprint":
-        if args.sprint_command == "list":
-            cmd_sprint_list(campaign)
-        elif args.sprint_command == "active":
-            cmd_sprint_active(campaign)
-        elif args.sprint_command == "switch":
-            switch_sprint(args.name)
-            print(f"Switched to sprint: {args.name}")
-    elif args.command == "hints":
+    if args.command == "hints":
         cmd_hints(campaign, args.arch, args.topic, args.list_topics)
     elif args.command == "context":
         cmd_context(campaign)

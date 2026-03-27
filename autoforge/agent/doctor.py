@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from autoforge.config import load_toml_with_local
 from autoforge.plugins.loader import CATEGORY_MAP
 from autoforge.pointer import REPO_ROOT
 
@@ -515,40 +516,42 @@ def check_runner(
 
 
 def _check_config_sections(
-    data: dict[str, Any],
     toml_path: Path,
     category: str,
     rel_toml: str,
     root: Path,
 ) -> list[CheckResult]:
-    """Warn about unexpected top-level sections in a plugin config.
+    """Warn about unexpected top-level sections in a local override.
 
-    Compares the actual config's top-level keys against the sibling
-    .toml.example file. Keys present in the config but absent from
-    the example are flagged as warnings.
+    Compares the ``.local.toml`` override's top-level keys against
+    the shared base ``.toml`` file. Keys present in the local
+    override but absent from the base are flagged as warnings.
     """
     results: list[CheckResult] = []
-    example_path = toml_path.with_suffix(".toml.example")
-    if not example_path.is_file():
+
+    local_path = toml_path.with_suffix(".local.toml")
+    if not local_path.is_file() or not toml_path.is_file():
         return results
 
-    example_data, err = _load_toml(example_path)
-    if example_data is None:
+    local_data, _ = _load_toml(local_path)
+    base_data, _ = _load_toml(toml_path)
+    if local_data is None or base_data is None:
         return results
 
-    expected_sections = set(example_data.keys())
-    actual_sections = set(data.keys())
+    expected_sections = set(base_data.keys())
+    actual_sections = set(local_data.keys())
     unexpected = actual_sections - expected_sections
 
+    rel_local = _rel(local_path, root)
     for section in sorted(unexpected):
         results.append(
             CheckResult(
                 f"plugin.{category}.config_sections",
                 "warn",
-                f"{rel_toml}: unexpected section [{section}] "
+                f"{rel_local}: unexpected section [{section}] "
                 f"(expected: {sorted(expected_sections)})",
                 "plugin",
-                path=rel_toml,
+                path=rel_local,
             )
         )
 
@@ -606,6 +609,9 @@ def check_plugins(
                 )
             )
 
+        local_path = plugin_dir / f"{name}.local.toml"
+        rel_local = _rel(local_path, root)
+
         if toml_path.is_file():
             data, err = _load_toml(toml_path)
             if data is not None:
@@ -618,7 +624,19 @@ def check_plugins(
                         path=rel_toml,
                     )
                 )
-                results.extend(_check_config_sections(data, toml_path, category, rel_toml, root))
+                if local_path.is_file():
+                    results.append(
+                        CheckResult(
+                            f"plugin.{category}.local_override",
+                            "pass",
+                            f"{rel_local} (local overrides active)",
+                            "plugin",
+                            path=rel_local,
+                        )
+                    )
+                results.extend(_check_config_sections(toml_path, category, rel_toml, root))
+                merged = load_toml_with_local(toml_path)
+                results.extend(_check_sensitive_empty(merged, rel_toml, category))
             else:
                 results.append(
                     CheckResult(
@@ -644,7 +662,7 @@ def check_plugins(
                 CheckResult(
                     f"plugin.{category}.config_exists",
                     "warn",
-                    f"{rel_toml} not found (copy from .toml.example if available)",
+                    f"{rel_toml} not found — shared defaults should be tracked in git",
                     "plugin",
                     path=rel_toml,
                 )
@@ -742,17 +760,16 @@ def _collect_effective_config(
             config["submodule_path"] = proj.get("submodule_path", "")
             config["scope"] = proj.get("scope", [])
 
-    # Runner (only if not agent-only)
+    # Runner (only if not agent-only) — merge shared + local overrides
     if role != "agent":
         runner_path = root / "projects" / project / "runner.toml"
-        if runner_path.is_file():
-            data, _ = _load_toml(runner_path)
-            if data:
-                config["runner"] = data.get("runner", {})
-                config["paths"] = data.get("paths", {})
-                config["timeouts"] = data.get("timeouts", {})
+        data = load_toml_with_local(runner_path)
+        if data:
+            config["runner"] = data.get("runner", {})
+            config["paths"] = data.get("paths", {})
+            config["timeouts"] = data.get("timeouts", {})
 
-    # Plugin configs
+    # Plugin configs — merge shared + local overrides
     if "plugins" in config:
         plugin_configs: dict[str, dict[str, Any]] = {}
         for category, directory in CATEGORY_MAP.items():
@@ -760,10 +777,9 @@ def _collect_effective_config(
             if not name:
                 continue
             toml_path = root / "projects" / project / directory / f"{name}.toml"
-            if toml_path.is_file():
-                data, _ = _load_toml(toml_path)
-                if data:
-                    plugin_configs[f"{directory}/{name}.toml"] = data
+            data = load_toml_with_local(toml_path)
+            if data:
+                plugin_configs[f"{directory}/{name}.toml"] = data
         if plugin_configs:
             config["plugin_configs"] = plugin_configs
 
@@ -795,6 +811,52 @@ def _format_config_value(value: Any, indent: int = 0) -> str:
             lines.append(f"{prefix}  - {v}")
         return "\n".join(lines)
     return repr(value)
+
+
+_SENSITIVE_PATTERNS = frozenset({"token", "key", "secret", "password", "credential", "auth"})
+
+
+def _is_sensitive_key(key: str) -> bool:
+    lower = key.lower()
+    return any(pat in lower for pat in _SENSITIVE_PATTERNS)
+
+
+def _redact_config_value(key: str, value: object) -> object:
+    """Redact the value if the key name suggests a credential, else recurse into dicts."""
+    if _is_sensitive_key(key):
+        return "<redacted>"
+    if isinstance(value, dict):
+        return {k: _redact_config_value(k, v) for k, v in value.items()}
+    return value
+
+
+def _check_sensitive_empty(
+    data: dict[str, Any],
+    rel_toml: str,
+    category: str,
+) -> list[CheckResult]:
+    """Warn when a sensitive config key is set to an empty string."""
+    results: list[CheckResult] = []
+
+    def _walk(d: dict[str, Any], path: str) -> None:
+        for k, v in d.items():
+            key_path = f"{path}.{k}" if path else k
+            if isinstance(v, dict):
+                _walk(v, key_path)
+            elif _is_sensitive_key(k) and v == "":
+                results.append(
+                    CheckResult(
+                        f"plugin.{category}.config_empty_secret",
+                        "warn",
+                        f"{rel_toml}: {key_path} is empty"
+                        f" — use ${{{{VAR}}}} syntax to read from environment",
+                        "plugin",
+                        path=rel_toml,
+                    )
+                )
+
+    _walk(data, "")
+    return results
 
 
 def format_effective_config(config: dict[str, Any]) -> str:
@@ -862,9 +924,11 @@ def format_effective_config(config: dict[str, Any]) -> str:
                 if isinstance(values, dict):
                     lines.append(f"      [{section}]")
                     for k, v in values.items():
-                        lines.append(f"        {k}: {v!r}")
+                        redacted = _redact_config_value(k, v)
+                        lines.append(f"        {k}: {redacted!r}")
                 else:
-                    lines.append(f"      {section}: {values!r}")
+                    redacted = _redact_config_value(section, values)
+                    lines.append(f"      {section}: {redacted!r}")
 
     return "\n".join(lines)
 

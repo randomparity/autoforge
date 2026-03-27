@@ -18,6 +18,30 @@ def validate_project_name(name: str) -> None:
         raise ValueError(msg)
 
 
+def list_projects() -> list[str]:
+    """Return names of all existing projects, sorted alphabetically."""
+    projects_root = REPO_ROOT / "projects"
+    if not projects_root.is_dir():
+        return []
+    return sorted(d.name for d in projects_root.iterdir() if d.is_dir())
+
+
+def switch_project(name: str) -> None:
+    """Switch the active project to an existing one.
+
+    Clears the active sprint since sprints are project-scoped.
+
+    Args:
+        name: Project name (lowercase alphanumeric + hyphens).
+    """
+    validate_project_name(name)
+    project_dir = REPO_ROOT / "projects" / name
+    if not project_dir.is_dir():
+        msg = f"Project not found: {project_dir}"
+        raise FileNotFoundError(msg)
+    save_pointer(name, "")
+
+
 def init_project(name: str) -> Path:
     """Create a new project directory skeleton.
 

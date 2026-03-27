@@ -102,7 +102,7 @@ class TestAppendResultWithTags:
         )
         append_result(1, "abc123", 14.5, "completed", "Test", path=path)
         rows = load_history(path=path)
-        assert rows[0]["tags"] == ""
+        assert not rows[0].get("tags")
 
 
 class TestBestResult:

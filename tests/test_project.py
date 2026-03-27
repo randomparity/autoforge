@@ -7,7 +7,12 @@ from unittest.mock import patch
 
 import pytest
 
-from autoforge.agent.project import init_project, validate_project_name
+from autoforge.agent.project import (
+    init_project,
+    list_projects,
+    switch_project,
+    validate_project_name,
+)
 
 
 class TestValidateProjectName:
@@ -57,3 +62,52 @@ class TestInitProject:
     def test_invalid_name_raises(self) -> None:
         with pytest.raises(ValueError, match="lowercase"):
             init_project("BAD_NAME")
+
+
+class TestListProjects:
+    def test_no_projects_dir(self, tmp_path: Path) -> None:
+        with patch("autoforge.agent.project.REPO_ROOT", tmp_path):
+            assert list_projects() == []
+
+    def test_empty_projects_dir(self, tmp_path: Path) -> None:
+        (tmp_path / "projects").mkdir()
+        with patch("autoforge.agent.project.REPO_ROOT", tmp_path):
+            assert list_projects() == []
+
+    def test_returns_sorted_project_names(self, tmp_path: Path) -> None:
+        for name in ("vllm", "dpdk", "kernel"):
+            (tmp_path / "projects" / name).mkdir(parents=True)
+        with patch("autoforge.agent.project.REPO_ROOT", tmp_path):
+            assert list_projects() == ["dpdk", "kernel", "vllm"]
+
+    def test_ignores_files(self, tmp_path: Path) -> None:
+        projects = tmp_path / "projects"
+        projects.mkdir()
+        (projects / "dpdk").mkdir()
+        (projects / "README.md").write_text("not a project")
+        with patch("autoforge.agent.project.REPO_ROOT", tmp_path):
+            assert list_projects() == ["dpdk"]
+
+
+class TestSwitchProject:
+    def test_switch_to_existing_clears_sprint(self, tmp_path: Path) -> None:
+        (tmp_path / "projects" / "dpdk").mkdir(parents=True)
+        with (
+            patch("autoforge.agent.project.REPO_ROOT", tmp_path),
+            patch("autoforge.agent.project.save_pointer") as mock_save,
+        ):
+            switch_project("dpdk")
+
+        mock_save.assert_called_once_with("dpdk", "")
+
+    def test_nonexistent_project_raises(self, tmp_path: Path) -> None:
+        (tmp_path / "projects").mkdir()
+        with (
+            patch("autoforge.agent.project.REPO_ROOT", tmp_path),
+            pytest.raises(FileNotFoundError, match="Project not found"),
+        ):
+            switch_project("nonexistent")
+
+    def test_invalid_name_raises(self) -> None:
+        with pytest.raises(ValueError, match="lowercase"):
+            switch_project("Bad Name")

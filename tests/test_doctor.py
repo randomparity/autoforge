@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import patch
 
 from autoforge.agent.doctor import (
+    _check_sensitive_empty,
     check_campaign,
     check_optimization_branch,
     check_plugins,
@@ -300,14 +301,14 @@ class TestCheckPlugins:
         assert deploy_config.status == "pass"
         assert "pass-through" in deploy_config.message
 
-    def test_unexpected_section_warns(self, tmp_path: Path) -> None:
+    def test_unexpected_section_in_local_override_warns(self, tmp_path: Path) -> None:
         project, _ = _build_config_tree(tmp_path, runner=False)
         tests_dir = tmp_path / "projects" / project / "tests"
-        # Write an example with only [testpmd]
-        _write_toml(tests_dir / "testpmd-memif.toml.example", "[testpmd]\n")
-        # Actual config has [testpmd] + stray [profiling]
+        # Base config has only [testpmd]
+        _write_toml(tests_dir / "testpmd-memif.toml", "[testpmd]\n")
+        # Local override has [testpmd] + stray [profiling]
         _write_toml(
-            tests_dir / "testpmd-memif.toml",
+            tests_dir / "testpmd-memif.local.toml",
             '[testpmd]\nlcores = "4-7"\n[profiling]\nenabled = false\n',
         )
         campaign_data = {
@@ -324,11 +325,11 @@ class TestCheckPlugins:
         assert len(section_warns) == 1
         assert "profiling" in section_warns[0].message
 
-    def test_no_warning_when_sections_match_example(self, tmp_path: Path) -> None:
+    def test_no_warning_when_local_sections_match_base(self, tmp_path: Path) -> None:
         project, _ = _build_config_tree(tmp_path, runner=False)
         tests_dir = tmp_path / "projects" / project / "tests"
-        _write_toml(tests_dir / "testpmd-memif.toml.example", "[testpmd]\n")
-        _write_toml(tests_dir / "testpmd-memif.toml", '[testpmd]\nlcores = "4-7"\n')
+        _write_toml(tests_dir / "testpmd-memif.toml", "[testpmd]\n")
+        _write_toml(tests_dir / "testpmd-memif.local.toml", '[testpmd]\nlcores = "4-7"\n')
         campaign_data = {
             "project": {
                 "build": "local",
@@ -446,3 +447,35 @@ class TestCheckOptimizationBranch:
         )
         assert exists_check is not None
         assert exists_check.status == "pass"
+
+
+class TestRedaction:
+    def test_format_effective_config_redacts_sensitive_keys(self) -> None:
+        config: dict[str, Any] = {
+            "project": "myproj",
+            "sprint": "2026-01-01-test",
+            "plugin_configs": {
+                "deploy/container-gpu.toml": {
+                    "deploy": {
+                        "env": {"HF_TOKEN": "hf_secret", "model": "Qwen/Qwen2-7B"},
+                    }
+                }
+            },
+        }
+        output = format_effective_config(config)
+        assert "hf_secret" not in output
+        assert "<redacted>" in output
+        assert "Qwen" in output
+
+    def test_check_sensitive_empty_warns_on_blank(self) -> None:
+        data: dict[str, Any] = {"deploy": {"env": {"HF_TOKEN": ""}}}
+        results = _check_sensitive_empty(data, "deploys/container-gpu.toml", "deploy")
+        assert len(results) == 1
+        assert results[0].status == "warn"
+        assert results[0].name == "plugin.deploy.config_empty_secret"
+        assert "HF_TOKEN" in results[0].message
+
+    def test_check_sensitive_empty_passes_when_filled(self) -> None:
+        data: dict[str, Any] = {"deploy": {"env": {"HF_TOKEN": "hf_real"}}}
+        results = _check_sensitive_empty(data, "deploys/container-gpu.toml", "deploy")
+        assert results == []

@@ -1,14 +1,15 @@
 # Runner Guide
 
-The runner runs on a lab machine with DPDK hardware. It polls for test
-requests, builds DPDK, runs performance tests (testpmd or DTS), and pushes
-results back via git.
+The runner runs on a lab machine with your project's target hardware. It polls
+for test requests, builds the project, runs performance tests, and pushes
+results back via git. Examples below use the DPDK project — see each project's
+README for project-specific setup (e.g. `projects/vllm/README.md`).
 
 ## Prerequisites
 
 - Python 3.13+
 - [uv](https://docs.astral.sh/uv/)
-- DPDK build dependencies: meson, ninja, gcc (or clang), pkg-config
+- Project-specific build dependencies (e.g. meson, ninja, gcc for DPDK; Docker/Podman for vLLM)
 - Git access to the autoforge repository (push permissions)
 - For testpmd plugin: NIC ports connected back-to-back (or memif vdevs)
 - For DTS plugin: DTS installed with a two-node topology (SUT + TG)
@@ -28,24 +29,36 @@ checks for runner prerequisites (meson, ninja, compiler, pkg-config).
 
 Run `uv run autoforge doctor --role runner` to validate your setup before starting the service.
 
-Configuration is split into framework config and per-plugin config:
+Configuration uses **shared defaults + local overrides**. Shared `.toml`
+files are tracked in git with sensible defaults. System-specific settings
+go in `.local.toml` siblings (gitignored). Create only the overrides you
+need:
 
 ```bash
-# Framework config (paths, timeouts, runner settings)
-cp projects/dpdk/runner.toml.example projects/dpdk/runner.toml
+# Override build directory and source path for your system
+cat > projects/dpdk/runner.local.toml <<'EOF'
+[paths]
+build_dir = "/fast-ssd/dpdk-build"
+EOF
 
-# Plugin configs (each plugin has its own sibling .toml)
-cp projects/dpdk/builds/local.toml.example projects/dpdk/builds/local.toml
-cp projects/dpdk/tests/testpmd-memif.toml.example projects/dpdk/tests/testpmd-memif.toml
-cp projects/dpdk/perfs/perf-record.toml.example projects/dpdk/perfs/perf-record.toml
+# Override lcores and port config for your hardware
+cat > projects/dpdk/tests/testpmd-memif.local.toml <<'EOF'
+[testpmd]
+lcores = "96-103"
+vdev = [
+    "net_memif0,role=server,id=0",
+    "net_memif1,role=client,id=0,zero-copy=yes",
+]
+EOF
 ```
 
-Edit each file for your hardware. All config files are gitignored — never
-commit host-specific paths or credentials.
+String values support `${VAR}` for environment variables and `${REPO_ROOT}`
+for repo-relative paths. Use `${VAR:-default}` for optional variables.
 
 The runner resolves framework config via: explicit path > `AUTOFORGE_CONFIG`
 env var > `.autoforge.toml` pointer. Plugin configs are loaded automatically
-from sibling `.toml` files next to each plugin `.py` file.
+from sibling `.toml` files next to each plugin `.py` file, with `.local.toml`
+overrides merged on top.
 
 **Framework config** (`projects/dpdk/runner.toml`):
 
@@ -124,7 +137,7 @@ When using memif vdevs, the runner logs a warning at startup if a server-role
 vdev has `zero-copy=yes` set — the memif PMD silently ignores zero-copy on
 the server side; only the client role supports it.
 
-See `projects/dpdk/runner.toml.example` for the full annotated list of options.
+See `projects/dpdk/runner.toml` for the full annotated list of options.
 
 testpmd requires root for hugepages and device access. The runner uses `sudo`
 by default. Configure passwordless sudo for the testpmd binary:
@@ -163,7 +176,7 @@ into where CPU cycles are spent.
 - Kernel support for hardware performance counters
 - If `profiling.sudo = true`: passwordless sudo for `perf` (same pattern as testpmd above)
 
-**Enable in `projects/dpdk/perfs/perf-record.toml`** (copy from `perf-record.toml.example`):
+**Enable in `projects/dpdk/perfs/perf-record.toml`** (or override in `perf-record.local.toml`):
 
 ```toml
 [profiling]
@@ -190,7 +203,7 @@ runs), and `gate.py` (CI regression gate with pass/warn/fail thresholds).
 ## Running
 
 ```bash
-uv run python -m autoforge.runner.service
+uv run autoforge-runner
 ```
 
 The runner supports four phase modes (configured via `[runner].phase`):
@@ -205,7 +218,7 @@ The runner supports four phase modes (configured via `[runner].phase`):
 1. `git pull --rebase` to fetch new requests
 2. Scan `projects/<project>/sprints/<sprint>/requests/` for pending requests
 3. Claim the first pending request (`pending` → `claimed`)
-4. Build DPDK at the specified commit (`claimed` → `building` → `built`)
+4. Build the project at the specified commit (`claimed` → `building` → `built`)
 5. Deploy build artifacts (`built` → `deploying` → `deployed`)
 6. Run test plugin (`deployed` → `running` → `completed` or `failed`)
 7. Push results and sleep
@@ -220,8 +233,11 @@ Create a wrapper script at `/usr/local/bin/autoforge-runner`:
 
 ```bash
 #!/bin/sh
-cd /path/to/checkout && exec .venv/bin/python -m autoforge.runner.service "$@"
+cd /path/to/checkout && exec .venv/bin/autoforge-runner "$@"
 ```
+
+The example below uses DPDK paths. Adjust `User`, `WorkingDirectory`, and
+config path for your project.
 
 Then create a systemd unit:
 
@@ -259,7 +275,7 @@ journalctl -u autoforge-runner -f
 
 For each request, the runner:
 
-1. Checks out the DPDK commit specified in the request
+1. Checks out the commit specified in the request
 2. Runs `meson setup` with configured options (cross-file, extra args)
 3. Runs `ninja` with the configured job count
 4. Build artifacts are written to the configured `build_dir`

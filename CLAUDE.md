@@ -22,6 +22,8 @@ uv run autoforge hints                                 # show arch optimization 
 uv run autoforge hints --list                           # list available hint topics
 uv run autoforge hints --topic perf-counters            # show perf counter reference
 uv run autoforge project init <name>                     # scaffold new project
+uv run autoforge project list                            # list all projects
+uv run autoforge project switch <name>                   # switch active project
 uv run autoforge sprint init <name>                      # create new sprint
 uv run autoforge sprint init <name> --from <sprint>      # clone sprint config
 uv run autoforge sprint list                              # list all sprints
@@ -62,6 +64,7 @@ pending → claimed → building → built → deploying → deployed → runnin
 
 ```
 autoforge/pointer.py   Shared: REPO_ROOT, PointerConfig, load_pointer(), save_pointer()
+autoforge/config.py    Shared: resolve_vars, deep_merge, load_toml_with_local (${VAR} + .local.toml)
 autoforge/campaign.py  Shared: CampaignConfig, typed accessor functions, campaign resolution
 autoforge/protocol/    Shared: TestRequest, Direction, GIT_TIMEOUT, status constants, StatusLiteral, extract_metric
 autoforge/plugins/     Plugin protocols (Builder, Deployer, Tester, Profiler, Judge, JudgeVerdict) and loader (load_pipeline, load_judge)
@@ -99,10 +102,16 @@ autoforge/perf/        Profiling: perf record orchestration, stack analysis, arc
 
 ### Configuration
 
+Configuration uses a **shared defaults + local overrides** pattern. Shared `.toml` files are tracked in git. System-specific overrides go in `.local.toml` siblings (gitignored). The two are deep-merged at load time, with local values winning.
+
+String values support `${VAR}` for environment variables and `${REPO_ROOT}` for repo-relative paths. Use `${VAR:-default}` for optional variables.
+
 - `.autoforge.toml` — pointer file at repo root, sets active project + sprint (tracked in git)
 - `config/campaign.toml.example` — template for new sprint campaign configs
-- `projects/<project>/runner.toml` — framework runner config (paths, timeouts). Gitignored; copy from `runner.toml.example`
-- `projects/<project>/{builds,deploys,tests,perfs,judges}/<plugin>.toml` — per-plugin config (sibling to .py). Gitignored; copy from `.toml.example`
+- `projects/<project>/runner.toml` — shared runner config (tracked in git)
+- `projects/<project>/runner.local.toml` — system-specific runner overrides (gitignored)
+- `projects/<project>/{builds,deploys,tests,perfs}/<plugin>.toml` — shared plugin config (tracked in git)
+- `projects/<project>/{builds,deploys,tests,perfs}/<plugin>.local.toml` — system-specific plugin overrides (gitignored)
 - `projects/<project>/sprints/<sprint>/campaign.toml` — authoritative campaign config per sprint
 - `pyelftools` in dependencies is required by DPDK's meson build, not by this project's Python code
 

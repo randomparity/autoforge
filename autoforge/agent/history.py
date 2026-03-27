@@ -54,9 +54,11 @@ def append_result(
 
     try:
         with open(path, "a", newline="") as f:
-            writer = csv.writer(f, delimiter="\t")
-            tags_str = ",".join(tags) if tags else ""
-            writer.writerow([seq, timestamp, commit, metric_str, status, description, tags_str])
+            writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+            row = [seq, timestamp, commit, metric_str, status, description]
+            if tags:
+                row.append(",".join(tags))
+            writer.writerow(row)
     except OSError as exc:
         msg = f"Failed to append result to {path}: {exc}"
         raise OSError(msg) from exc
@@ -130,10 +132,13 @@ def append_failure(
     try:
         write_header = not path.exists()
         with open(path, "a", newline="") as f:
-            writer = csv.writer(f, delimiter="\t")
+            writer = csv.writer(f, delimiter="\t", lineterminator="\n")
             if write_header:
                 writer.writerow(FAILURE_COLUMNS)
-            writer.writerow([timestamp, commit, metric_str, description, diff_summary])
+            row = [timestamp, commit, metric_str, description]
+            if diff_summary:
+                row.append(diff_summary)
+            writer.writerow(row)
     except OSError as exc:
         msg = f"Failed to append failure to {path}: {exc}"
         raise OSError(msg) from exc
