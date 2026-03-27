@@ -190,7 +190,7 @@ runs), and `gate.py` (CI regression gate with pass/warn/fail thresholds).
 ## Running
 
 ```bash
-uv run python -m autoforge.runner.service
+uv run autoforge-runner
 ```
 
 The runner supports four phase modes (configured via `[runner].phase`):
@@ -220,7 +220,7 @@ Create a wrapper script at `/usr/local/bin/autoforge-runner`:
 
 ```bash
 #!/bin/sh
-cd /path/to/checkout && exec .venv/bin/python -m autoforge.runner.service "$@"
+cd /path/to/checkout && exec .venv/bin/autoforge-runner "$@"
 ```
 
 Then create a systemd unit:

@@ -12,6 +12,7 @@ dependencies = [
 [project.scripts]
 autoforge = "autoforge.agent.cli:main"
 autoforge-loop = "autoforge.agent.loop:main"
+autoforge-runner = "autoforge.runner.service:main"
 
 [build-system]
 requires = ["hatchling"]
