@@ -10,11 +10,11 @@
   "tags": null,
   "metric_name": "output_throughput",
   "metric_path": "output_throughput",
-  "status": "deploying",
+  "status": "failed",
   "claimed_at": "2026-03-27T16:24:57.894459+00:00",
   "built_at": null,
   "deployed_at": null,
-  "completed_at": null,
+  "completed_at": "2026-03-27T16:25:04.765134+00:00",
   "build_runner_id": null,
   "deploy_runner_id": null,
   "test_runner_id": null,
@@ -22,5 +22,5 @@
   "results_json": null,
   "results_summary": null,
   "metric_value": null,
-  "error": null
+  "error": "docker: Error response from daemon: create ${HOME}/.cache/huggingface: \"${HOME}/.cache/huggingface\" includes invalid characters for a local volume name, only \"[a-zA-Z0-9][a-zA-Z0-9_.-]\" are allowed. If you intended to pass a host directory, use absolute path\n\nRun 'docker run --help' for more information\n"
 }
