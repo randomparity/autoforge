@@ -21,6 +21,32 @@ class ProfileSummary(TypedDict):
 logger = logging.getLogger(__name__)
 
 
+def leaf_percentages(stacks: dict[str, int]) -> dict[str, float]:
+    """Compute per-leaf-function percentage from a folded-stack dict.
+
+    Credits the leaf (last) frame of each stack trace and returns the
+    fraction of total samples attributed to each function.
+
+    Args:
+        stacks: Folded-stack dict from fold_stacks().
+
+    Returns:
+        Dict mapping function name to percentage of total samples (0–100).
+        Returns an empty dict when there are no samples.
+    """
+    func_counts: Counter[str] = Counter()
+    total = 0
+    for stack, count in stacks.items():
+        frames = stack.split(";")
+        leaf = frames[-1]
+        func_counts[leaf] += count
+        total += count
+
+    if total == 0:
+        return {}
+    return {name: count / total * 100 for name, count in func_counts.items()}
+
+
 def top_functions(stacks: dict[str, int], limit: int = 20) -> list[dict[str, Any]]:
     """Return the hottest functions by sample count.
 
@@ -34,19 +60,16 @@ def top_functions(stacks: dict[str, int], limit: int = 20) -> list[dict[str, Any
         List of dicts with 'name', 'samples', and 'pct' keys,
         sorted by samples descending.
     """
-    func_counts: Counter[str] = Counter()
-    total = 0
-    for stack, count in stacks.items():
-        frames = stack.split(";")
-        leaf = frames[-1]
-        func_counts[leaf] += count
-        total += count
-
-    if total == 0:
+    pcts = leaf_percentages(stacks)
+    if not pcts:
         return []
 
+    func_counts: Counter[str] = Counter()
+    for stack, count in stacks.items():
+        func_counts[stack.split(";")[-1]] += count
+
     return [
-        {"name": name, "samples": samples, "pct": round(samples / total * 100, 2)}
+        {"name": name, "samples": samples, "pct": round(pcts[name], 2)}
         for name, samples in func_counts.most_common(limit)
     ]
 

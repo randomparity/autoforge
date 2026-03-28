@@ -12,10 +12,6 @@ from autoforge.pointer import REPO_ROOT
 
 _VAR_RE = re.compile(r"\$\{([^}]+)\}")
 
-_BUILTINS: dict[str, str] = {
-    "REPO_ROOT": str(REPO_ROOT),
-}
-
 
 def _resolve_string(value: str) -> str:
     """Resolve ``${VAR}`` and ``${VAR:-default}`` references in a string.
@@ -29,10 +25,12 @@ def _resolve_string(value: str) -> str:
         expr = match.group(1)
         if ":-" in expr:
             name, default = expr.split(":-", 1)
-            return _BUILTINS.get(name, os.environ.get(name, default))
+            if name == "REPO_ROOT":
+                return str(REPO_ROOT)
+            return os.environ.get(name, default)
         name = expr
-        if name in _BUILTINS:
-            return _BUILTINS[name]
+        if name == "REPO_ROOT":
+            return str(REPO_ROOT)
         try:
             return os.environ[name]
         except KeyError:

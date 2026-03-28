@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from autoforge.agent.history import load_failures, load_history
+from autoforge.agent.history import load_failures, load_history, score_rows
 from autoforge.agent.protocol import find_request_by_seq
 from autoforge.agent.sprint import failures_path, requests_dir, results_path
 from autoforge.campaign import (
@@ -19,6 +19,7 @@ from autoforge.campaign import (
     project_name,
 )
 from autoforge.pointer import REPO_ROOT
+from autoforge.protocol import STATUS_COMPLETED, STATUS_FAILED
 
 logger = logging.getLogger(__name__)
 
@@ -201,22 +202,16 @@ def _scored_rows(
     direction: str,
 ) -> list[dict[str, Any]]:
     """Extract rows with valid metrics, sorted by best first."""
-    rows = []
-    for row in history:
-        val = row.get("metric_value", "")
-        if val:
-            try:
-                rows.append(
-                    {
-                        "sequence": row.get("sequence", "?"),
-                        "value": float(val),
-                        "status": row.get("status", "?"),
-                        "description": row.get("description", ""),
-                        "tags": row.get("tags", ""),
-                    }
-                )
-            except ValueError:
-                continue
+    rows = [
+        {
+            "sequence": row.get("sequence", "?"),
+            "value": val,
+            "status": row.get("status", "?"),
+            "description": row.get("description", ""),
+            "tags": row.get("tags", ""),
+        }
+        for val, row in score_rows(history)
+    ]
     reverse = direction != "minimize"
     rows.sort(key=lambda r: r["value"], reverse=reverse)
     return rows
@@ -225,7 +220,7 @@ def _scored_rows(
 def _first_completed(history: list[dict[str, str]]) -> dict[str, Any] | None:
     """Find the first completed result (baseline)."""
     for row in history:
-        if row.get("status") == "completed" and row.get("metric_value"):
+        if row.get("status") == STATUS_COMPLETED and row.get("metric_value"):
             try:
                 return {
                     "sequence": row.get("sequence", "?"),
@@ -234,6 +229,51 @@ def _first_completed(history: list[dict[str, str]]) -> dict[str, Any] | None:
             except ValueError:
                 continue
     return None
+
+
+def _accepted_patches(
+    history: list[dict[str, str]],
+    baseline: dict[str, Any],
+    direction: str,
+) -> list[dict[str, Any]]:
+    """Return rows that set a new running best relative to baseline.
+
+    Args:
+        history: Ordered list of result rows from the TSV history.
+        baseline: Baseline row with at least a ``value`` key.
+        direction: ``"maximize"`` or ``"minimize"``.
+
+    Returns:
+        List of dicts with keys: sequence, value, gain_pct, description, patch_num.
+    """
+    base_val = baseline["value"]
+    compare = max if direction == "maximize" else min
+    running_best = base_val
+    patches: list[dict[str, Any]] = []
+
+    for row in history:
+        val_str = row.get("metric_value", "")
+        if not val_str or row.get("status") != STATUS_COMPLETED:
+            continue
+        try:
+            val = float(val_str)
+        except ValueError:
+            continue
+
+        if compare(val, running_best) == val and val != running_best:
+            running_best = val
+            gain_pct = ((val - base_val) / base_val * 100) if base_val else 0
+            patches.append(
+                {
+                    "patch_num": len(patches) + 1,
+                    "sequence": row.get("sequence", "?"),
+                    "value": val,
+                    "gain_pct": gain_pct,
+                    "description": row.get("description", ""),
+                }
+            )
+
+    return patches
 
 
 def _build_accepted_table(
@@ -245,34 +285,19 @@ def _build_accepted_table(
     if not baseline:
         return "No accepted patches."
 
-    base_val = baseline["value"]
+    patches = _accepted_patches(history, baseline, direction)
+    if not patches:
+        return "No improvements over baseline."
+
     lines = [
         "| # | Request | Metric | Cumulative gain | Description |",
         "|---|---------|--------|-----------------|-------------|",
     ]
-
-    patch_num = 0
-    running_best = base_val
-    compare = max if direction == "maximize" else min
-    for row in history:
-        val_str = row.get("metric_value", "")
-        if not val_str or row.get("status") != "completed":
-            continue
-        try:
-            val = float(val_str)
-        except ValueError:
-            continue
-
-        if compare(val, running_best) == val and val != running_best:
-            patch_num += 1
-            running_best = val
-            gain_pct = ((val - base_val) / base_val * 100) if base_val else 0
-            seq = row.get("sequence", "?")
-            desc = row.get("description", "")
-            lines.append(f"| {patch_num} | {seq} | {val:.2f} | {gain_pct:+.1f}% | {desc} |")
-
-    if patch_num == 0:
-        return "No improvements over baseline."
+    for p in patches:
+        lines.append(
+            f"| {p['patch_num']} | {p['sequence']} | {p['value']:.2f}"
+            f" | {p['gain_pct']:+.1f}% | {p['description']} |"
+        )
     return "\n".join(lines)
 
 
@@ -295,7 +320,7 @@ def _build_rejected_table(failures: list[dict[str, str]]) -> str:
 
 def _build_failures_table(history: list[dict[str, str]], req_dir: Path) -> str:
     """Build markdown table of build/test failures."""
-    failed = [r for r in history if r.get("status") == "failed"]
+    failed = [r for r in history if r.get("status") == STATUS_FAILED]
     if not failed:
         return "No build/test failures."
 
@@ -342,33 +367,21 @@ def _build_patch_prompts(
     if not baseline:
         return "<!-- No accepted patches to discuss. -->"
 
+    patches = _accepted_patches(history, baseline, direction)
+    if not patches:
+        return "<!-- No accepted patches to discuss. -->"
+
     base_val = baseline["value"]
     prompts = []
-    running_best = base_val
-    compare = max if direction == "maximize" else min
-    patch_num = 0
-    for row in history:
-        val_str = row.get("metric_value", "")
-        if not val_str or row.get("status") != "completed":
-            continue
-        try:
-            val = float(val_str)
-        except ValueError:
-            continue
-        if compare(val, running_best) == val and val != running_best:
-            patch_num += 1
-            running_best = val
-            desc = row.get("description", "?")
-            prompts.append(
-                f"### Patch {patch_num}: {desc} (request {row.get('sequence', '?')})\n\n"
-                f"**What changed.** <!-- Describe the specific code modifications. -->\n\n"
-                f"**Motivation.** <!-- Why was this expected to help? -->\n\n"
-                f"**Why it worked.** <!-- Architectural explanation for the "
-                f"{val - base_val:+.2f} improvement. -->"
-            )
-
-    if not prompts:
-        return "<!-- No accepted patches to discuss. -->"
+    for p in patches:
+        improvement = p["value"] - base_val
+        prompts.append(
+            f"### Patch {p['patch_num']}: {p['description']} (request {p['sequence']})\n\n"
+            f"**What changed.** <!-- Describe the specific code modifications. -->\n\n"
+            f"**Motivation.** <!-- Why was this expected to help? -->\n\n"
+            f"**Why it worked.** <!-- Architectural explanation for the "
+            f"{improvement:+.2f} improvement. -->"
+        )
     return "\n\n".join(prompts)
 
 

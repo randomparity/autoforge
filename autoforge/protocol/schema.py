@@ -146,6 +146,25 @@ class TestRequest:
         return self.status in (STATUS_COMPLETED, STATUS_FAILED)
 
 
+def log_for_phase(request: TestRequest, phase: str | None) -> str | None:
+    """Return the log snippet for a given phase, or None if unavailable.
+
+    Args:
+        request: The test request containing log snippets.
+        phase: One of "build", "deploy", or "test". Any other value returns None.
+
+    Returns:
+        The log snippet string, or None if the phase is unrecognised or the log is absent.
+    """
+    if phase == "build":
+        return request.build_log_snippet
+    if phase == "deploy":
+        return request.deploy_log_snippet
+    if phase == "test":
+        return request.test_log_snippet
+    return None
+
+
 def validate_status(status: StatusLiteral) -> None:
     """Raise ValueError if status is not a valid status string."""
     if status not in VALID_STATUSES:

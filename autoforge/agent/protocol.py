@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import logging
-import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
 
 from autoforge.campaign import CampaignConfig, metric_config, project_config
+from autoforge.git_utils import git_pull_with_stash
+from autoforge.pointer import REPO_ROOT
 from autoforge.protocol import GIT_TIMEOUT, TestRequest
 
 logger = logging.getLogger(__name__)
@@ -126,18 +127,17 @@ def find_request_by_seq(seq: int, requests_dir: Path) -> TestRequest | None:
 
 def poll_for_completion(
     seq: int,
+    requests_dir: Path,
     timeout: int = 3600,
     interval: int = 30,
-    *,
-    requests_dir: Path,
 ) -> TestRequest:
     """Poll git until the given request reaches a terminal state.
 
     Args:
         seq: Sequence number to poll for.
+        requests_dir: Directory containing request JSON files.
         timeout: Maximum seconds to wait.
         interval: Seconds between polls.
-        requests_dir: Directory containing request JSON files.
 
     Returns:
         The completed or failed TestRequest.
@@ -150,34 +150,8 @@ def poll_for_completion(
     deadline = time.monotonic() + timeout
 
     while time.monotonic() < deadline:
-        # Stash any uncommitted changes (e.g. from a co-located runner)
-        # so that git pull --rebase can succeed on a dirty working tree.
-        stash_result = subprocess.run(
-            ["git", "stash", "--include-untracked"],
-            capture_output=True,
-            text=True,
-            timeout=GIT_TIMEOUT,
-        )
-        stashed = stash_result.returncode == 0 and "No local changes" not in stash_result.stdout
-
-        pull_result = subprocess.run(
-            ["git", "pull", "--rebase"],
-            capture_output=True,
-            text=True,
-            timeout=GIT_TIMEOUT,
-        )
-        if pull_result.returncode != 0:
-            logger.warning("git pull --rebase failed: %s", pull_result.stderr.strip())
-
-        if stashed:
-            pop_result = subprocess.run(
-                ["git", "stash", "pop"],
-                capture_output=True,
-                text=True,
-                timeout=GIT_TIMEOUT,
-            )
-            if pop_result.returncode != 0:
-                logger.warning("git stash pop failed: %s", pop_result.stderr.strip())
+        if not git_pull_with_stash(REPO_ROOT, timeout=GIT_TIMEOUT):
+            logger.warning("git pull --rebase failed, continuing poll")
 
         matches = list(requests_dir.glob(f"{seq:04d}_*.json"))
         if not matches:

@@ -68,7 +68,7 @@ overrides merged on top.
 | `[runner]` | `log_level` | Log level: `debug`, `info`, `warning`, `error` (default: info) |
 | `[runner]` | `log_file` | Optional log file path (logs to stdout and file) |
 | `[runner]` | `poll_interval` | Seconds between polling for requests (default: 30) |
-| `[paths]` | `dpdk_src` | Absolute path to the DPDK source tree |
+| `[paths]` | `source_dir` | Absolute path to the source tree |
 | `[paths]` | `build_dir` | Build artifact directory (created automatically) |
 | `[paths]` | `dts_dir` | DTS installation path (DTS plugin only) |
 | `[timeouts]` | `build_minutes` | Max build time before abort (default: 30) |

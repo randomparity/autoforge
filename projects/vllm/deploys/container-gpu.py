@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import shutil
 import subprocess
 import time
 import urllib.error
@@ -12,22 +11,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from autoforge.plugins.protocols import BuildResult, DeployResult
+from projects.vllm._utils import resolve_runtime
 
 if TYPE_CHECKING:
     from autoforge.campaign import ProjectConfig
 
 logger = logging.getLogger(__name__)
-
-
-def _resolve_runtime(configured: str = "auto") -> str:
-    if configured and configured != "auto":
-        return configured
-    if shutil.which("docker"):
-        return "docker"
-    if shutil.which("podman"):
-        return "podman"
-    msg = "No container runtime found. Install docker or podman."
-    raise RuntimeError(msg)
 
 
 class ContainerGpuDeployer:
@@ -37,7 +26,7 @@ class ContainerGpuDeployer:
 
     def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
         cfg = runner_config.get("deploy", {})
-        self._runtime = _resolve_runtime(cfg.get("runtime", "auto"))
+        self._runtime = resolve_runtime(cfg.get("runtime", "auto"))
         self._model = cfg.get("model", "Qwen/Qwen3-0.6B")
         self._port = int(cfg.get("port", 8000))
         self._container_name = cfg.get("container_name", "vllm-bench")

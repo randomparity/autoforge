@@ -36,7 +36,7 @@ from autoforge.campaign import (
     submodule_path,
 )
 from autoforge.logging_config import setup_logging
-from autoforge.protocol import Direction
+from autoforge.protocol import STATUS_COMPLETED, STATUS_FAILED, Direction
 
 
 def run_interactive_iteration(
@@ -94,18 +94,18 @@ def run_interactive_iteration(
     try:
         result = poll_for_completion(
             seq,
+            req,
             timeout=agent_timeout(campaign),
             interval=agent_poll_interval(campaign),
-            requests_dir=req,
         )
     except TimeoutError:
         print(f"Request {seq:04d} timed out.")
         append_result(seq, commit, None, "timed_out", description, path=res)
         return True
 
-    if result.status == "failed":
+    if result.status == STATUS_FAILED:
         print(f"Request {seq:04d} FAILED: {result.error}")
-        append_result(seq, commit, None, "failed", description, path=res)
+        append_result(seq, commit, None, STATUS_FAILED, description, path=res)
         return True
 
     metric = result.metric_value
@@ -119,7 +119,7 @@ def run_interactive_iteration(
     current_best = best_result(res, direction=direction)
     best_val = float(current_best["metric_value"]) if current_best is not None else None
 
-    append_result(seq, commit, metric, "completed", description, path=res)
+    append_result(seq, commit, metric, STATUS_COMPLETED, description, path=res)
 
     ctx = ResultContext(
         seq=seq,
@@ -167,15 +167,15 @@ def run_baseline(
     try:
         result = poll_for_completion(
             seq,
+            req,
             timeout=agent_timeout(campaign),
             interval=agent_poll_interval(campaign),
-            requests_dir=req,
         )
     except TimeoutError:
         print(f"Baseline request {seq:04d} timed out.")
         return
 
-    if result.status == "failed":
+    if result.status == STATUS_FAILED:
         print(f"Baseline request {seq:04d} FAILED: {result.error}")
         return
 

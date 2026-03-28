@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import subprocess
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -16,8 +15,10 @@ from autoforge.campaign import (
 from autoforge.campaign import (
     project_config as _project_config,
 )
+from autoforge.git_utils import git_pull_with_stash
 from autoforge.plugins.loader import load_component
 from autoforge.plugins.protocols import BuildResult, DeployResult
+from autoforge.pointer import REPO_ROOT
 from autoforge.protocol import (
     GIT_TIMEOUT,
     STATUS_BUILDING,
@@ -39,43 +40,6 @@ from autoforge.runner.protocol import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def git_pull() -> bool:
-    """Pull latest changes with rebase. Returns True on success.
-
-    Stashes uncommitted changes before pulling so that a co-located
-    agent (or any other process modifying the working tree) does not
-    block the rebase.
-    """
-    stash_result = subprocess.run(
-        ["git", "stash", "--include-untracked"],
-        capture_output=True,
-        text=True,
-        timeout=GIT_TIMEOUT,
-    )
-    stashed = stash_result.returncode == 0 and "No local changes" not in stash_result.stdout
-
-    result = subprocess.run(
-        ["git", "pull", "--rebase"],
-        capture_output=True,
-        text=True,
-        timeout=GIT_TIMEOUT,
-    )
-    if result.returncode != 0:
-        logger.error("git pull --rebase failed: %s", result.stderr.strip())
-
-    if stashed:
-        pop_result = subprocess.run(
-            ["git", "stash", "pop"],
-            capture_output=True,
-            text=True,
-            timeout=GIT_TIMEOUT,
-        )
-        if pop_result.returncode != 0:
-            logger.warning("git stash pop failed: %s", pop_result.stderr.strip())
-
-    return result.returncode == 0
 
 
 def recover_stale_requests(requests_dir: Path, stale_statuses: frozenset[str]) -> None:
@@ -116,7 +80,7 @@ def _run_build(
     proj_name = project_name(campaign)
     paths = config.get("paths", {})
     timeouts = config.get("timeouts", {})
-    source_path = Path(paths.get("source_dir", paths.get("dpdk_src", "/opt/dpdk")))
+    source_path = Path(paths.get("source_dir", "/opt/dpdk"))
     build_dir = Path(paths.get("build_dir", "/tmp/build"))
     build_timeout = int(timeouts.get("build_minutes", 30)) * 60
 
@@ -136,7 +100,7 @@ def _run_build(
             request,
             request_path,
             error="Build failed",
-            log_snippet=build_result.log,
+            build_log_snippet=build_result.log,
             failed_phase="build",
         )
         return None
@@ -259,7 +223,7 @@ class PhaseRunner(ABC):
 
         try:
             while True:
-                if not git_pull():
+                if not git_pull_with_stash(REPO_ROOT, timeout=GIT_TIMEOUT):
                     logger.warning("Git pull failed, retrying next cycle")
                     time.sleep(self.poll_interval)
                     continue

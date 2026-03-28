@@ -68,7 +68,13 @@ from autoforge.campaign import (
     submodule_path,
 )
 from autoforge.pointer import load_pointer
-from autoforge.protocol import Direction, TestRequest
+from autoforge.protocol import (
+    STATUS_COMPLETED,
+    STATUS_FAILED,
+    Direction,
+    TestRequest,
+    log_for_phase,
+)
 
 
 def cmd_context(campaign: CampaignConfig) -> None:
@@ -161,9 +167,9 @@ def cmd_poll(campaign: CampaignConfig) -> None:
     try:
         result = poll_for_completion(
             latest.sequence,
+            req,
             timeout=agent_timeout(campaign),
             interval=agent_poll_interval(campaign),
-            requests_dir=req,
         )
     except TimeoutError:
         print(f"Request {latest.sequence:04d} timed out.")
@@ -202,7 +208,7 @@ def _format_timeline(request: TestRequest) -> str:
             parts.append(f"{label} {time_str}")
         prev_dt = dt
 
-    if request.status == "failed" and request.failed_phase:
+    if parts and request.status == STATUS_FAILED and request.failed_phase:
         parts[-1] = f"FAILED at {request.failed_phase} {parts[-1].split(' ', 1)[1]}"
 
     return " -> ".join(parts)
@@ -210,15 +216,14 @@ def _format_timeline(request: TestRequest) -> str:
 
 def _failure_log(request: TestRequest) -> str | None:
     """Return the appropriate log snippet based on failed_phase."""
-    phase = request.failed_phase
-    if phase == "build":
-        return request.build_log_snippet
-    if phase == "deploy":
-        return request.deploy_log_snippet
-    if phase == "test":
-        return request.test_log_snippet
+    snippet = log_for_phase(request, request.failed_phase)
+    if snippet is not None:
+        return snippet
     # Fallback: return whichever is available
-    return request.build_log_snippet or request.deploy_log_snippet or request.test_log_snippet
+    for phase in ("build", "deploy", "test"):
+        if snippet := log_for_phase(request, phase):
+            return snippet
+    return None
 
 
 def _print_result(result: TestRequest) -> None:
@@ -228,7 +233,7 @@ def _print_result(result: TestRequest) -> None:
     metric = result.metric_value
     error = result.error
 
-    if status == "failed":
+    if status == STATUS_FAILED:
         phase_info = f" at {result.failed_phase}" if result.failed_phase else ""
         print(f"Request {seq:04d} FAILED{phase_info}: {error}")
     else:
@@ -238,7 +243,7 @@ def _print_result(result: TestRequest) -> None:
     if timeline:
         print(f"  Timeline: {timeline}")
 
-    if status == "failed":
+    if status == STATUS_FAILED:
         log = _failure_log(result)
         if log:
             lines = log.splitlines()
@@ -276,15 +281,15 @@ def cmd_judge(campaign: CampaignConfig, dry_run: bool) -> None:
         print(f"Request {latest.sequence:04d} is still {latest.status}. Run poll first.")
         sys.exit(1)
 
-    metric = latest.metric_value if latest.status == "completed" else None
+    metric = latest.metric_value if latest.status == STATUS_COMPLETED else None
     commit = latest.source_commit
     description = latest.description or ""
-    req_tags = getattr(latest, "tags", None)
+    req_tags = latest.tags
 
     cmp_mode = metric_comparison(campaign)
     if cmp_mode == "rolling_average":
         window = metric_comparison_window(campaign)
-        avg = rolling_average_result(res, direction=direction, window=window)
+        avg = rolling_average_result(res, window=window)
         best_val = avg
     else:
         current_best = best_result(res, direction=direction)
@@ -330,17 +335,17 @@ def _poll_and_record(
     try:
         result = poll_for_completion(
             seq,
+            req,
             timeout=agent_timeout(campaign),
             interval=agent_poll_interval(campaign),
-            requests_dir=req,
         )
     except TimeoutError:
         print(f"{label.capitalize()} request {seq:04d} timed out.")
-        return
+        sys.exit(1)
 
     _print_result(result)
 
-    if result.status == "completed" and result.metric_value is not None:
+    if result.status == STATUS_COMPLETED and result.metric_value is not None:
         res = results_path()
         append_result(
             result.sequence,
@@ -356,7 +361,7 @@ def _poll_and_record(
             dry_run=False,
         )
         print(f"{label.capitalize()} recorded in results.tsv.")
-    elif result.status == "failed":
+    elif result.status == STATUS_FAILED:
         print(f"{label.capitalize()} failed — not recorded. Fix the issue and retry.")
 
 
@@ -461,20 +466,6 @@ def _format_log(log: str, error_patterns: tuple[str, ...] | None = None) -> str:
     return "\n".join(lines)
 
 
-def _get_log_for_phase(
-    request: TestRequest,
-    phase: str,
-) -> str | None:
-    """Return the log snippet for a given phase."""
-    if phase == "build":
-        return request.build_log_snippet
-    if phase == "deploy":
-        return request.deploy_log_snippet
-    if phase == "test":
-        return request.test_log_snippet
-    return None
-
-
 def cmd_logs(
     campaign: CampaignConfig,
     seq: int,
@@ -498,7 +489,7 @@ def cmd_logs(
         phases_to_show = [request.failed_phase]
     else:
         for p in ("build", "deploy", "test"):
-            if _get_log_for_phase(request, p):
+            if log_for_phase(request, p):
                 phases_to_show.append(p)
 
     if not phases_to_show:
@@ -506,7 +497,7 @@ def cmd_logs(
         return
 
     for p in phases_to_show:
-        snippet = _get_log_for_phase(request, p)
+        snippet = log_for_phase(request, p)
         if not snippet:
             print(f"No {p} log for request {seq:04d}.")
             continue
@@ -568,7 +559,7 @@ def _format_inspect(request: TestRequest) -> str:
 
     max_log_lines = 50
     for phase in ("build", "deploy", "test"):
-        log = _get_log_for_phase(request, phase)
+        log = log_for_phase(request, phase)
         if log:
             log_lines = log.splitlines()
             shown = log_lines[:max_log_lines]
