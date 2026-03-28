@@ -49,6 +49,25 @@ Because `perf` must attach to a containerized process (which Docker's seccomp pr
 
 Profile failure is non-fatal — if perf is unavailable, results still complete normally without profiling data.
 
+### Improving symbol resolution
+
+By default, ~30-40% of samples may show as `[unknown]`. Three improvements
+reduce this:
+
+1. **Container symbol resolution** (automatic) — the profiler passes
+   `--symfs /proc/<pid>/root/` to `perf script`, resolving libraries
+   inside the container's filesystem.
+
+2. **Python perf maps** — set `perf_map = true` in `[deploy]` config
+   (or `container-gpu.local.toml`). This sets `PYTHONPERFSUPPORT=1` in the
+   container, causing CPython 3.12+ to emit `/tmp/perf-<pid>.map` files
+   that map interpreter frames to Python function names.
+
+3. **NVIDIA debug symbols** — install `nvidia-driver-XXX-server-dbgsym`
+   (Ubuntu) or `nvidia-driver-debuginfo` (RHEL) on the runner host to
+   resolve CUDA driver frames. GPU kernel execution remains invisible to
+   `perf` (use NVIDIA Nsight Systems for GPU-side profiling).
+
 ### Interpreting profile results in `context`
 
 After `poll` completes, the results JSON includes a `"profile"` section (when profiling succeeds). Use this to guide your next optimization: focus on the functions consuming the most CPU samples.

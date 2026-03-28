@@ -455,6 +455,12 @@ appears in results, check these common issues on the runner machine:
    in your campaign.toml. An empty profiler field skips profiling even when
    `profiling.enabled = true`.
 
+5. **Container symbol resolution.** When profiling a containerized process
+   from the host, pass `symfs=f"/proc/{pid}/root"` to `profile_pid()` so
+   `perf script` can find shared libraries inside the container's
+   filesystem. The `perf-container` profiler plugin does this
+   automatically.
+
 ## Judge
 
 Overrides the default keep/revert decision after a test completes. This is

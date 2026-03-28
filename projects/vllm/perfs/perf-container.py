@@ -56,6 +56,7 @@ class PerfContainerProfiler:
             frequency=merged.get("frequency", 99),
             sudo=merged.get("sudo", False),
             cpus=merged.get("cpus"),
+            symfs=f"/proc/{target_pid}/root",
         )
         elapsed = time.monotonic() - start
 

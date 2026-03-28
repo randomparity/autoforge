@@ -200,6 +200,24 @@ The profiling library lives in `autoforge/perf/`: `profile.py` (capture),
 detection and PMU event profiles), `diff.py` (differential comparison between
 runs), and `gate.py` (CI regression gate with pass/warn/fail thresholds).
 
+### Debug symbols for container profiling
+
+When profiling containerized processes, `perf` resolves symbols from the
+container's filesystem via `--symfs`. For complete symbol resolution:
+
+**Inside the container image** (build-time):
+- Python debug symbols: install `python3-dbg` or build Python with `--with-debug`
+- PyTorch/vLLM symbols are typically available (Python packages include `.so` files with symbols)
+
+**On the runner host** (NVIDIA GPU drivers):
+- Ubuntu/Debian: `apt install nvidia-driver-XXX-server-dbgsym` (replace XXX with your driver version)
+- RHEL/CentOS: `yum install nvidia-driver-debuginfo` from the NVIDIA CUDA repo
+- Verify: `perf report` should show named NVIDIA functions instead of `[unknown]`
+
+**Kernel symbols:**
+- Ensure `kptr_restrict = 0`: `sudo sysctl kernel.kptr_restrict=0`
+- Install kernel debuginfo: `apt install linux-image-$(uname -r)-dbgsym` (Ubuntu) or `debuginfo-install kernel` (RHEL)
+
 ## Running
 
 ```bash

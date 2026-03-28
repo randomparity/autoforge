@@ -36,6 +36,7 @@ class ContainerGpuDeployer:
         self._gpu_memory_util = float(cfg.get("gpu_memory_utilization", 0.90))
         self._env_vars: dict[str, str] = cfg.get("env", {})
         self._devices: str = cfg.get("devices", "all")
+        self._enable_perf_map: bool = bool(cfg.get("perf_map", False))
 
     def deploy(self, build_result: BuildResult) -> DeployResult:
         image = build_result.artifacts.get("image", "localhost/vllm-bench:latest")
@@ -72,6 +73,8 @@ class ContainerGpuDeployer:
         )
         for key, val in self._env_vars.items():
             cmd.extend(["--env", f"{key}={val}"])
+        if self._enable_perf_map:
+            cmd.extend(["--env", "PYTHONPERFSUPPORT=1"])
         cmd.append(image)
         cmd.extend(
             [

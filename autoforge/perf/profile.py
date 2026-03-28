@@ -90,6 +90,7 @@ def _extract_folded_stacks(
     *,
     sudo: bool,
     timeout: float,
+    symfs: str | None = None,
 ) -> tuple[dict[str, int], str | None]:
     """Run ``perf script``, fold the stacks, and write them to disk.
 
@@ -103,6 +104,8 @@ def _extract_folded_stacks(
         ``(stacks, None)`` on success, or ``({}, error_message)`` on failure.
     """
     script_cmd = _build_cmd(["perf", "script", "-i", str(perf_data)], sudo=sudo)
+    if symfs:
+        script_cmd.extend(["--symfs", symfs])
     script_result = subprocess.run(
         script_cmd,
         capture_output=True,
@@ -204,6 +207,7 @@ def profile_pid(
     frequency: int = 99,
     sudo: bool = False,
     cpus: str | None = None,
+    symfs: str | None = None,
 ) -> PerfCaptureResult:
     """Capture perf record + perf stat against a running process.
 
@@ -282,7 +286,9 @@ def profile_pid(
             stat_stderr_text[:300],
         )
 
-    stacks, error = _extract_folded_stacks(perf_data, output_dir, sudo=sudo, timeout=timeout)
+    stacks, error = _extract_folded_stacks(
+        perf_data, output_dir, sudo=sudo, timeout=timeout, symfs=symfs
+    )
     if error is not None:
         return PerfCaptureResult(
             success=False,

@@ -177,6 +177,42 @@ class TestPerfCaptureResult:
         assert result.counters["cycles"] == 1000.0
 
 
+class TestExtractFoldedStacksSymfs:
+    """Verify --symfs is passed through to perf script."""
+
+    @patch("autoforge.perf.profile.subprocess.run")
+    def test_symfs_included_when_set(self, mock_run, tmp_path: Path):
+        from autoforge.perf.profile import _extract_folded_stacks
+
+        mock_run.return_value = type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+        _extract_folded_stacks(
+            tmp_path / "perf.data",
+            tmp_path,
+            sudo=False,
+            timeout=30,
+            symfs="/proc/42/root",
+        )
+        cmd = mock_run.call_args[0][0]
+        assert "--symfs" in cmd
+        idx = cmd.index("--symfs")
+        assert cmd[idx + 1] == "/proc/42/root"
+
+    @patch("autoforge.perf.profile.subprocess.run")
+    def test_symfs_omitted_when_none(self, mock_run, tmp_path: Path):
+        from autoforge.perf.profile import _extract_folded_stacks
+
+        mock_run.return_value = type("Result", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+        _extract_folded_stacks(
+            tmp_path / "perf.data",
+            tmp_path,
+            sudo=False,
+            timeout=30,
+            symfs=None,
+        )
+        cmd = mock_run.call_args[0][0]
+        assert "--symfs" not in cmd
+
+
 class TestProfilePidMissing:
     @patch("autoforge.perf.profile.shutil.which", return_value=None)
     def test_perf_not_found(self, _mock, tmp_path: Path):
