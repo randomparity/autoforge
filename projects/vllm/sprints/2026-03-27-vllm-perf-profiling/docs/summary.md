@@ -25,11 +25,11 @@ Note: Early experiments used a single benchmark iteration with 100 prompts, prod
 ### Python micro-optimizations (no measurable effect)
 
 1. **check_stop fast path** — removed asserts, cached `num_output_tokens`, short-circuited stop_token_ids check, single-token decode fast path
-1. **Context manager removal** — removed `record_function_or_nullcontext` wrapping `allocate_slots` in the per-request scheduler loop (100 nullcontext enter/exit per step)
-1. **Local variable caching** — cached `self.requests`, `req_id_to_index` as locals in `update_from_output` and `_update_after_schedule`
-1. **Inline token append** — bypassed `isinstance` check and method dispatch in single-token decode path
-1. **Block hash skip** — avoided `list.extend([])` in `update_block_hashes` when no new blocks
-1. **GC threshold tuning** — raised gen-0 threshold from 700 to 50000 allocations
+2. **Context manager removal** — removed `record_function_or_nullcontext` wrapping `allocate_slots` in the per-request scheduler loop (100 nullcontext enter/exit per step)
+3. **Local variable caching** — cached `self.requests`, `req_id_to_index` as locals in `update_from_output` and `_update_after_schedule`
+4. **Inline token append** — bypassed `isinstance` check and method dispatch in single-token decode path
+5. **Block hash skip** — avoided `list.extend([])` in `update_block_hashes` when no new blocks
+6. **GC threshold tuning** — raised gen-0 threshold from 700 to 50000 allocations
 
 ### Numpy fast path (regressed)
 

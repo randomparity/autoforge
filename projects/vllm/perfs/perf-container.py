@@ -111,5 +111,7 @@ def _discover_container_pid(container_name: str, runtime: str) -> int:
 
 
 def _output_dir() -> Path:
-    repo_root = Path(__file__).resolve().parent.parent.parent.parent
-    return repo_root / "perf" / "results" / str(int(time.time()))
+    """Create a timestamped directory under perf/results/ for profile output."""
+    from autoforge.pointer import REPO_ROOT
+
+    return REPO_ROOT / "perf" / "results" / str(int(time.time()))

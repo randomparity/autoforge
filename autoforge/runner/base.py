@@ -51,7 +51,7 @@ def _collect_runner_sysinfo() -> dict[str, Any]:
 
     Returns a dict suitable for embedding in results JSON.
     """
-    from autoforge.agent.sysinfo import collect_sysinfo
+    from autoforge.sysinfo import collect_sysinfo
 
     info = collect_sysinfo()
     info["role"] = "runner"
@@ -325,8 +325,13 @@ def _run_test(
     update_status(request, STATUS_RUNNING, request_path)
 
     # Start profiler thread before the test so it captures during benchmark execution.
+    join_timeout = 60
     if profiler_setup is not None:
+        from autoforge.perf.profile import PERF_TIMEOUT_MARGIN
+
         profiler, duration, profile_config = profiler_setup
+        startup_delay = profile_config.get("startup_delay", 5)
+        join_timeout = startup_delay + duration + PERF_TIMEOUT_MARGIN + 10
         profile_thread = threading.Thread(
             target=_run_profile_thread,
             args=(profiler, duration, profile_config, profile_result),
@@ -339,7 +344,7 @@ def _run_test(
     finally:
         # Wait for profiler to finish (it may already be done).
         if profile_thread is not None:
-            profile_thread.join(timeout=60)
+            profile_thread.join(timeout=join_timeout)
         # Clean up the deploy target (e.g. container) after profiling completes.
         _cleanup_deploy_target(deploy_result)
 

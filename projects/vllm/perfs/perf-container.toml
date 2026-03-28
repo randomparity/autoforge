@@ -4,3 +4,5 @@ frequency = 99
 sudo = false
 container_name = "vllm-bench"
 runtime = "auto"
+# duration = 30        # seconds to capture (must fit within benchmark window)
+# startup_delay = 5    # seconds to wait before starting capture

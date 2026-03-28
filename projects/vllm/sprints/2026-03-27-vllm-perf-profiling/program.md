@@ -18,7 +18,7 @@ All artifacts (requests, results, failures, docs) are stored under `projects/vll
 This is a two-machine system:
 
 - **You** (the agent) edit vLLM Python source on this workstation and push changes via git.
-- **A remote runner** polls git, builds a container from source (`VLLM_USE_PRECOMPILED=1`), runs the serving benchmark, captures a perf profile, and pushes results back.
+- **A remote runner** polls git, builds a container using precompiled vLLM wheels (`VLLM_USE_PRECOMPILED=1`) with your modified Python source layered on top, runs the serving benchmark, captures a perf profile, and pushes results back.
 
 You cannot run the benchmark locally — the runner machine has the GPU. Communication is entirely via git: you push request JSON files, the runner pushes results back. Each experiment takes ~5-8 minutes (push + container build + benchmark + profile + push back).
 
@@ -44,7 +44,7 @@ Because `perf` must attach to a containerized process (which Docker's seccomp pr
 1. `perf` binary installed and in PATH
 2. Passwordless sudo for perf: `echo "$USER ALL=(ALL) NOPASSWD: $(which perf)" | sudo tee /etc/sudoers.d/perf`
 3. `sudo = true` in the profiler config: create `projects/vllm/perfs/perf-container.local.toml` with `[profiling]\nsudo = true`
-4. `sysctl kernel.perf_event_paranoid <= 0` (PEBS precise events may need `0` or `-1`)
+4. `sysctl kernel.perf_event_paranoid=0` — required for PEBS precise events used by this profiler (`<= 1` suffices for regular call-graph sampling)
 5. `kptr_restrict = 0` for kernel symbol resolution (optional but recommended)
 
 Profile failure is non-fatal — if perf is unavailable, results still complete normally without profiling data.
@@ -94,7 +94,12 @@ All commands: `uv run autoforge <subcommand>`
 | `uv run autoforge sprint list` | List all sprints with iteration counts |
 | `uv run autoforge sprint active` | Print active sprint name |
 | `uv run autoforge revert` | Revert last vLLM submodule commit and force-push fork |
-| `uv run autoforge build-log --seq N` | Print formatted build log for request sequence N |
+| `uv run autoforge logs --seq N` | Print logs for request N (auto-detects phase) |
+| `uv run autoforge logs --seq N --phase build` | Print build log only |
+| `uv run autoforge inspect --seq N` | Full request details: timeline, metric, logs |
+| `uv run autoforge finale` | Submit finale request (modified source, no profiling) |
+| `uv run autoforge sprint switch <name>` | Switch to a different sprint |
+| `uv run autoforge build-log --seq N` | Print formatted build log for request sequence N (alias) |
 
 ## The experiment loop
 

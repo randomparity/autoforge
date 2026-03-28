@@ -215,6 +215,8 @@ def _parse_results(result_file: Path | None, stdout: str) -> dict[str, Any]:
 
 def _average_metrics(all_metrics: list[dict[str, Any]]) -> dict[str, Any]:
     """Compute the mean of numeric metrics across iterations."""
+    if not all_metrics:
+        return {}
     if len(all_metrics) == 1:
         return all_metrics[0]
 

@@ -372,11 +372,7 @@ class TestVllmServingBenchTester:
 
     @patch("subprocess.run")
     def test_benchmark_timeout(self, mock_run: MagicMock) -> None:
-        # First call (bench) times out, second call (teardown rm -f) succeeds
-        mock_run.side_effect = [
-            subprocess.TimeoutExpired(cmd="vllm", timeout=60),
-            _make_completed(0),
-        ]
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="vllm", timeout=60)
         tester = self._make_tester()
         result = tester.test(self._deploy_result(), timeout=60)
         assert not result.success

@@ -167,13 +167,10 @@ def _load_summary_data(campaign: CampaignConfig) -> dict[str, Any]:
 
     # System info
     from autoforge.agent.sprint import docs_dir
-    from autoforge.agent.sysinfo import load_all_sysinfo, render_sysinfo_section
+    from autoforge.sysinfo import load_all_sysinfo, render_sysinfo_section
 
     docs = docs_dir()
-    all_sysinfo = load_all_sysinfo(
-        docs if docs.exists() else docs,
-        requests_dir=req_dir,
-    )
+    all_sysinfo = load_all_sysinfo(docs, requests_dir=req_dir)
     system_info_section = render_sysinfo_section(all_sysinfo)
 
     return {
