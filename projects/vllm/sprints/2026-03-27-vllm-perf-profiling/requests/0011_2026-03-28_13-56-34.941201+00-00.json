@@ -10,11 +10,11 @@
   "tags": null,
   "metric_name": "output_throughput",
   "metric_path": "output_throughput",
-  "status": "running",
+  "status": "completed",
   "claimed_at": "2026-03-28T13:56:58.272184+00:00",
   "built_at": null,
   "deployed_at": null,
-  "completed_at": null,
+  "completed_at": "2026-03-28T14:00:21.872036+00:00",
   "build_runner_id": null,
   "deploy_runner_id": null,
   "test_runner_id": null,
@@ -22,8 +22,105 @@
   "deploy_log_snippet": null,
   "test_log_snippet": null,
   "failed_phase": null,
-  "results_json": null,
-  "results_summary": null,
-  "metric_value": null,
+  "results_json": {
+    "date": "20260328-140000",
+    "endpoint_type": "vllm",
+    "backend": "vllm",
+    "label": null,
+    "model_id": "Qwen/Qwen3-0.6B",
+    "tokenizer_id": "Qwen/Qwen3-0.6B",
+    "num_prompts": 100,
+    "request_rate": "inf",
+    "burstiness": 1.0,
+    "max_concurrency": 64,
+    "duration": 10.791955298976973,
+    "completed": 100,
+    "failed": 0,
+    "total_input_tokens": 51200,
+    "total_output_tokens": 25600,
+    "request_throughput": 9.266161435034812,
+    "request_goodput": null,
+    "output_throughput": 2372.137327368912,
+    "total_token_throughput": 7116.411982106735,
+    "max_output_tokens_per_s": 5696.0,
+    "max_concurrent_requests": 100,
+    "rtfx": 0.0,
+    "mean_ttft_ms": 3488.941922149679,
+    "median_ttft_ms": 5168.1192009855295,
+    "std_ttft_ms": 2382.416112858717,
+    "p99_ttft_ms": 5457.777630314231,
+    "mean_tpot_ms": 10.883265390943087,
+    "median_tpot_ms": 11.843254813734973,
+    "std_tpot_ms": 2.9277014682432756,
+    "p99_tpot_ms": 12.732601180733234,
+    "mean_itl_ms": 10.883265825099194,
+    "median_itl_ms": 10.828066515387036,
+    "std_itl_ms": 31.402418986798928,
+    "p99_itl_ms": 13.19855035922948,
+    "profile": {
+      "top_functions": [
+        {
+          "name": "[unknown]",
+          "samples": 56,
+          "pct": 42.42
+        },
+        {
+          "name": "_PyEval_EvalFrameDefault",
+          "samples": 20,
+          "pct": 15.15
+        },
+        {
+          "name": "tokenizers::models::bpe::word::Word::merge_all",
+          "samples": 5,
+          "pct": 3.79
+        },
+        {
+          "name": "cfree",
+          "samples": 3,
+          "pct": 2.27
+        },
+        {
+          "name": "<core::str::lossy::Utf8Chunks as core::iter::traits::iterator::Iterator>::next",
+          "samples": 3,
+          "pct": 2.27
+        },
+        {
+          "name": "<core::iter::adapters::flatten::FlatMap<I,U,F> as core::iter::traits::iterator::Iterator>::next",
+          "samples": 3,
+          "pct": 2.27
+        },
+        {
+          "name": "_copy_from_iter",
+          "samples": 2,
+          "pct": 1.52
+        },
+        {
+          "name": "__rcu_read_lock",
+          "samples": 2,
+          "pct": 1.52
+        },
+        {
+          "name": "__tls_get_addr",
+          "samples": 2,
+          "pct": 1.52
+        },
+        {
+          "name": "<tokenizers::models::ModelWrapper as tokenizers::tokenizer::Model>::id_to_token",
+          "samples": 2,
+          "pct": 1.52
+        }
+      ],
+      "derived_metrics": {
+        "ipc": 1.928433,
+        "l1d_miss_rate": 0.012694,
+        "llc_miss_rate": 0.000174,
+        "branch_miss_rate": 0.002077
+      },
+      "diagnostics": [],
+      "total_samples": 132
+    }
+  },
+  "results_summary": "2372.1 tok/s output | TTFT 5168.1ms | TPOT 11.84ms",
+  "metric_value": 2372.137327368912,
   "error": null
 }
