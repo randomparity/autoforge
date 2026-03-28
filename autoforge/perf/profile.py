@@ -164,6 +164,8 @@ def _build_perf_cmds(
         [
             "perf",
             "record",
+            "-e",
+            "cycles",
             "--call-graph",
             "dwarf,16384",
             "-F",
