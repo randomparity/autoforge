@@ -37,12 +37,15 @@ This sprint uses Linux `perf` to capture CPU-side stack traces and hardware coun
 - **Hardware counters**: cache misses, branch mispredictions, instructions per cycle — useful for identifying memory-bound or branch-heavy code paths
 - **Top functions**: the profile summary includes the hottest functions by sample count
 
-### Non-root perf requirements
+### Perf requirements for container profiling
 
-The runner machine must have:
-1. `sysctl kernel.perf_event_paranoid <= 1` (or `CAP_PERFMON` on the runner user)
-2. `perf` binary installed and in PATH
-3. `kptr_restrict = 0` for kernel symbol resolution (optional but recommended)
+Because `perf` must attach to a containerized process (which Docker's seccomp profile blocks), the profiler runs with `sudo`. The runner machine must have:
+
+1. `perf` binary installed and in PATH
+2. Passwordless sudo for perf: `echo "$USER ALL=(ALL) NOPASSWD: $(which perf)" | sudo tee /etc/sudoers.d/perf`
+3. `sudo = true` in the profiler config: create `projects/vllm/perfs/perf-container.local.toml` with `[profiling]\nsudo = true`
+4. `sysctl kernel.perf_event_paranoid <= 0` (PEBS precise events may need `0` or `-1`)
+5. `kptr_restrict = 0` for kernel symbol resolution (optional but recommended)
 
 Profile failure is non-fatal — if perf is unavailable, results still complete normally without profiling data.
 
