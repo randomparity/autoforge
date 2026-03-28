@@ -14,3 +14,5 @@ timestamp	source_commit	metric_value	description	diff_summary
  1 file changed, 21 insertions(+), 18 deletions(-)"
 2026-03-28T14:58:29.667751+00:00	e0b7d39f7650a8a1364bd8ce66c0b7fa4a914222	4964.471631958772	Combined: check_stop fast path + context manager removal + local caching	"vllm/v1/core/sched/scheduler.py | 16 +++++-----------
  1 file changed, 5 insertions(+), 11 deletions(-)"
+2026-03-28T15:06:15.185880+00:00	eeaaeea6893d48137a3676e4a692a21094dbbde4	4986.924557688738	Raise GC gen-0 threshold to reduce collection frequency during serving	"vllm/v1/engine/core.py | 8 ++++++++
+ 1 file changed, 8 insertions(+)"

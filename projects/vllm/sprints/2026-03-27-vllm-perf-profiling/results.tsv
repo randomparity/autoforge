@@ -13,3 +13,4 @@ sequence	timestamp	source_commit	metric_value	status	description	tags
 18	2026-03-28T14:48:07.642119+00:00	ee0947a60ac32b7ca08b6f6b918b93aa21c274aa	4992.904617401475	completed	Baseline: unmodified vllm
 19	2026-03-28T14:53:18.517725+00:00	0bc9670741aa430d35e240802b030740e34b5c89	4986.622631657157	completed	Baseline: unmodified vllm
 20	2026-03-28T14:58:28.351084+00:00	e0b7d39f7650a8a1364bd8ce66c0b7fa4a914222	4964.471631958772	completed	Combined: check_stop fast path + context manager removal + local caching
+21	2026-03-28T15:06:13.678864+00:00	eeaaeea6893d48137a3676e4a692a21094dbbde4	4986.924557688738	completed	Raise GC gen-0 threshold to reduce collection frequency during serving
