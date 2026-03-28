@@ -9,3 +9,4 @@ sequence	timestamp	source_commit	metric_value	status	description	tags
 13	2026-03-28T14:17:42.803194+00:00	828a2d386b227723ecb3edb319ecd20f9c07bc06	2381.282373937819	completed	Fix init + stacked micro-optimizations for scheduler hot path
 14	2026-03-28T14:25:54.103873+00:00	9cc95b6c66ec6e07550a9f420a0c202487feca2d	2432.0618141260597	completed	Remove context manager overhead from allocate_slots in hot loop
 15	2026-03-28T14:31:36.407629+00:00	fde1375b068d645c1c48733c052df0fe91526246	2357.819964323377	completed	Cache local refs in scheduler hot loops to reduce attribute lookups
+17	2026-03-28T14:44:10.031317+00:00	ee0947a60ac32b7ca08b6f6b918b93aa21c274aa	4635.846821531732	completed	Baseline: unmodified vllm
