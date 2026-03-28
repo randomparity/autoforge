@@ -52,6 +52,7 @@ class VllmServingBenchTester:
         self._output_len = int(cfg.get("random_output_len", 256))
         self._max_concurrency = int(cfg.get("max_concurrency", 64))
         self._request_rate = str(cfg.get("request_rate", "inf"))
+        self._iterations = int(cfg.get("iterations", 1))
 
     def test(self, deploy_result: DeployResult, timeout: int) -> TestResult:
         model = deploy_result.target_info.get("model", "unknown")
@@ -61,76 +62,60 @@ class VllmServingBenchTester:
         local_result_dir = Path(tempfile.mkdtemp(prefix="vllm-bench-"))
         start = time.monotonic()
         try:
-            cmd = [
-                runtime,
-                "exec",
-                container,
-                "vllm",
-                "bench",
-                "serve",
-                "--backend",
-                "vllm",
-                "--base-url",
-                "http://localhost:8000",
-                "--model",
-                model,
-                "--dataset-name",
-                self._dataset,
-                "--num-prompts",
-                str(self._num_prompts),
-                "--max-concurrency",
-                str(self._max_concurrency),
-                "--request-rate",
-                self._request_rate,
-                "--save-result",
-                "--result-dir",
-                _CONTAINER_RESULT_DIR,
-                "--result-filename",
-                _CONTAINER_RESULT_FILE,
-                "--percentile-metrics",
-                "ttft,tpot,itl",
-            ]
-            if self._dataset == "random":
-                cmd.extend(
-                    [
-                        "--random-input-len",
-                        str(self._input_len),
-                        "--random-output-len",
-                        str(self._output_len),
-                    ]
+            cmd = self._build_bench_cmd(runtime, container, model)
+            per_iter_timeout = timeout // max(self._iterations, 1)
+
+            all_metrics: list[dict[str, Any]] = []
+            for iteration in range(self._iterations):
+                logger.info(
+                    "Running benchmark iteration %d/%d: %s",
+                    iteration + 1,
+                    self._iterations,
+                    " ".join(cmd),
+                )
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=per_iter_timeout,
                 )
 
-            logger.info("Running benchmark: %s", " ".join(cmd))
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-            )
+                if result.returncode != 0:
+                    elapsed = time.monotonic() - start
+                    return TestResult(
+                        success=False,
+                        metric_value=None,
+                        results_json=None,
+                        results_summary=None,
+                        error=f"iteration {iteration + 1}: " + result.stderr[-1000:],
+                        duration_seconds=elapsed,
+                    )
+
+                local_result_file = _copy_result_from_container(
+                    runtime,
+                    container,
+                    local_result_dir,
+                )
+                metrics = _parse_results(local_result_file, result.stdout)
+                all_metrics.append(metrics)
+                tput = metrics.get("output_throughput", 0)
+                logger.info(
+                    "Iteration %d/%d: %.1f tok/s",
+                    iteration + 1,
+                    self._iterations,
+                    tput,
+                )
+
             elapsed = time.monotonic() - start
-
-            if result.returncode != 0:
-                return TestResult(
-                    success=False,
-                    metric_value=None,
-                    results_json=None,
-                    results_summary=None,
-                    error=result.stderr[-1000:],
-                    duration_seconds=elapsed,
-                )
-
-            local_result_file = _copy_result_from_container(
-                runtime,
-                container,
-                local_result_dir,
-            )
-            metrics = _parse_results(local_result_file, result.stdout)
-            output_tput = metrics.get("output_throughput")
+            averaged = _average_metrics(all_metrics)
+            output_tput = averaged.get("output_throughput")
+            averaged["iterations"] = self._iterations
+            averaged["per_iteration"] = [m.get("output_throughput") for m in all_metrics]
             return TestResult(
                 success=True,
                 metric_value=output_tput,
-                results_json=metrics,
-                results_summary=_format_summary(metrics),
+                results_json=averaged,
+                results_summary=_format_summary(averaged),
                 error=None,
                 duration_seconds=elapsed,
             )
@@ -145,6 +130,47 @@ class VllmServingBenchTester:
             )
         finally:
             shutil.rmtree(local_result_dir, ignore_errors=True)
+
+    def _build_bench_cmd(self, runtime: str, container: str, model: str) -> list[str]:
+        cmd = [
+            runtime,
+            "exec",
+            container,
+            "vllm",
+            "bench",
+            "serve",
+            "--backend",
+            "vllm",
+            "--base-url",
+            "http://localhost:8000",
+            "--model",
+            model,
+            "--dataset-name",
+            self._dataset,
+            "--num-prompts",
+            str(self._num_prompts),
+            "--max-concurrency",
+            str(self._max_concurrency),
+            "--request-rate",
+            self._request_rate,
+            "--save-result",
+            "--result-dir",
+            _CONTAINER_RESULT_DIR,
+            "--result-filename",
+            _CONTAINER_RESULT_FILE,
+            "--percentile-metrics",
+            "ttft,tpot,itl",
+        ]
+        if self._dataset == "random":
+            cmd.extend(
+                [
+                    "--random-input-len",
+                    str(self._input_len),
+                    "--random-output-len",
+                    str(self._output_len),
+                ]
+            )
+        return cmd
 
 
 def _copy_result_from_container(
@@ -181,6 +207,21 @@ def _parse_results(result_file: Path | None, stdout: str) -> dict[str, Any]:
         if match:
             metrics[key] = float(match.group(1))
     return metrics
+
+
+def _average_metrics(all_metrics: list[dict[str, Any]]) -> dict[str, Any]:
+    """Compute the mean of numeric metrics across iterations."""
+    if len(all_metrics) == 1:
+        return all_metrics[0]
+
+    averaged: dict[str, Any] = {}
+    for key in all_metrics[0]:
+        values = [m[key] for m in all_metrics if key in m]
+        if values and all(isinstance(v, (int, float)) for v in values):
+            averaged[key] = sum(values) / len(values)
+        elif values:
+            averaged[key] = values[-1]
+    return averaged
 
 
 def _format_summary(metrics: dict[str, Any]) -> str:

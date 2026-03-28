@@ -2,9 +2,10 @@
 # System-specific overrides: bench-serving.local.toml (gitignored).
 
 [bench]
-num_prompts = 100
+num_prompts = 200
 dataset_name = "random"
 random_input_len = 512
 random_output_len = 256
 max_concurrency = 64
 request_rate = "inf"
+iterations = 5

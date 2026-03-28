@@ -10,7 +10,7 @@ parent = "2026-03-27-vllm-source-opt"
 name = "output_throughput"
 path = "output_throughput"
 direction = "maximize"
-threshold = 2.0    # keep changes that improve throughput by >= 2%
+threshold = 1.0    # keep changes that improve throughput by >= 1%
 
 [platform]
 arch = "x86_64"

@@ -9,9 +9,9 @@ poll_interval = 30
 
 [paths]
 source_dir = "${REPO_ROOT}/projects/vllm/repo"
-# Build artifacts directory — override in runner.local.toml for your system
-build_dir = "/tmp/vllm-build"
+# Build artifacts directory — ramdisk for faster builds
+build_dir = "/mnt/ramdisk/vllm-build"
 
 [timeouts]
 build_minutes = 60
-test_minutes = 20
+test_minutes = 30
