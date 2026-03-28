@@ -5,16 +5,19 @@ from __future__ import annotations
 import logging
 import subprocess
 from collections import Counter
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from autoforge.agent.hints import workload_hints
 from autoforge.campaign import platform_arch
+from autoforge.perf.analyze import ProfileSummary
+from autoforge.protocol import STATUS_FAILED, log_for_phase
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from autoforge.protocol import TestRequest
 
+from autoforge.agent.history import score_rows
 from autoforge.campaign import (
     CampaignConfig,
     campaign_meta,
@@ -34,7 +37,7 @@ def format_context(
     history: list[dict[str, str]],
     campaign: CampaignConfig,
     *,
-    profile_summary: dict[str, Any] | None = None,
+    profile_summary: ProfileSummary | None = None,
 ) -> str:
     """Build a prompt-friendly summary of campaign state and history.
 
@@ -69,7 +72,7 @@ def format_context(
         lines.append(f"Goal: {goal}")
         lines.append("")
 
-    scored = _scored_rows(history)
+    scored = score_rows(history)
     if scored:
         selector = min if metric_direction(campaign) == "minimize" else max
         best_val, best_row = selector(scored, key=lambda x: x[0])
@@ -105,20 +108,7 @@ def format_context(
     return "\n".join(lines)
 
 
-def _scored_rows(history: list[dict[str, str]]) -> list[tuple[float, dict[str, str]]]:
-    """Extract rows with valid numeric metric values."""
-    scored = []
-    for row in history:
-        val = row.get("metric_value", "")
-        if val:
-            try:
-                scored.append((float(val), row))
-            except ValueError:
-                continue
-    return scored
-
-
-def format_profile_lines(summary: dict[str, Any]) -> list[str]:
+def format_profile_lines(summary: ProfileSummary) -> list[str]:
     """Format profiling data for prompt context.
 
     Args:
@@ -149,7 +139,7 @@ def format_profile_lines(summary: dict[str, Any]) -> list[str]:
     return lines
 
 
-def extract_profile_summary(result: TestRequest) -> dict[str, Any] | None:
+def extract_profile_summary(result: TestRequest) -> ProfileSummary | None:
     """Extract profiling summary from a completed test result.
 
     Args:
@@ -192,7 +182,7 @@ def format_failure_patterns(requests_dir: Path, limit: int = 20) -> str:
         except (ValueError, KeyError, TypeError, OSError):
             continue
 
-        if request.status != "failed":
+        if request.status != STATUS_FAILED:
             continue
 
         phase = request.failed_phase or "unknown"
@@ -202,7 +192,7 @@ def format_failure_patterns(requests_dir: Path, limit: int = 20) -> str:
             error_patterns[phase] = Counter()
 
         error_msg = request.error or ""
-        log = _pick_log_for_phase(request, phase)
+        log = log_for_phase(request, phase) or ""
         pattern = _classify_error(error_msg, log)
         if pattern:
             error_patterns[phase][pattern] += 1
@@ -219,17 +209,6 @@ def format_failure_patterns(requests_dir: Path, limit: int = 20) -> str:
         parts.append(f"{count} {phase}{detail}")
 
     return f"Recent failures: {', '.join(parts)}"
-
-
-def _pick_log_for_phase(request: TestRequest, phase: str) -> str:
-    """Return the log snippet matching the phase."""
-    if phase == "build":
-        return request.build_log_snippet or ""
-    if phase == "deploy":
-        return getattr(request, "deploy_log_snippet", "") or ""
-    if phase == "test":
-        return getattr(request, "test_log_snippet", "") or ""
-    return ""
 
 
 def _classify_error(error_msg: str, log: str) -> str:
@@ -296,6 +275,9 @@ def check_scope_compliance(source_path: Path, scope: list[str]) -> list[str]:
     Returns:
         List of changed file paths not matching any scope prefix. Empty list
         means all changes are in scope (or scope is empty / no files changed).
+
+    Raises:
+        subprocess.CalledProcessError: If the git diff command fails.
     """
     if not scope:
         return []
@@ -311,8 +293,9 @@ def check_scope_compliance(source_path: Path, scope: list[str]) -> list[str]:
         cwd=str(source_path),
     )
     if result.returncode != 0:
-        logger.warning("scope check git diff failed: %s", result.stderr.strip())
-        return []
+        raise subprocess.CalledProcessError(
+            result.returncode, result.args, result.stdout, result.stderr
+        )
 
     out_of_scope: list[str] = []
     for line in result.stdout.strip().splitlines():

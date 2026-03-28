@@ -470,7 +470,6 @@ class TestCmdJudge:
 
         mock_avg.assert_called_once_with(
             tmp_path / "results.tsv",
-            direction="maximize",
             window=3,
         )
         mock_best.assert_not_called()

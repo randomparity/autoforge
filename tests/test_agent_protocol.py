@@ -173,18 +173,18 @@ class TestPollForCompletion:
         return path
 
     @patch("autoforge.agent.protocol.time.sleep")
-    @patch("autoforge.agent.protocol.subprocess.run")
+    @patch("autoforge.git_utils.subprocess.run")
     def test_already_completed(self, mock_run: MagicMock, mock_sleep: MagicMock, tmp_path) -> None:
         self._write_request(tmp_path, seq=1, status=STATUS_COMPLETED)
         mock_run.return_value = MagicMock(returncode=0, stderr="")
 
-        result = poll_for_completion(1, timeout=60, interval=5, requests_dir=tmp_path)
+        result = poll_for_completion(1, tmp_path, timeout=60, interval=5)
 
         assert result.status == STATUS_COMPLETED
         mock_sleep.assert_not_called()
 
     @patch("autoforge.agent.protocol.time.sleep")
-    @patch("autoforge.agent.protocol.subprocess.run")
+    @patch("autoforge.git_utils.subprocess.run")
     def test_completes_after_one_poll(
         self, mock_run: MagicMock, mock_sleep: MagicMock, tmp_path
     ) -> None:
@@ -203,7 +203,7 @@ class TestPollForCompletion:
 
         mock_sleep.side_effect = fake_sleep
 
-        result = poll_for_completion(1, timeout=300, interval=5, requests_dir=tmp_path)
+        result = poll_for_completion(1, tmp_path, timeout=300, interval=5)
 
         assert result.status == STATUS_COMPLETED
         assert result.metric_value == 85.0

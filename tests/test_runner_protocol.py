@@ -252,7 +252,7 @@ class TestFail:
         path = tmp_path / "0001_test.json"
         req.write(path)
 
-        fail(req, path, "build failed: missing header", log_snippet="error: foo.h")
+        fail(req, path, "build failed: missing header", build_log_snippet="error: foo.h")
 
         assert req.status == STATUS_FAILED
         assert req.error == "build failed: missing header"

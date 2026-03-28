@@ -5,6 +5,8 @@ from __future__ import annotations
 import subprocess
 from unittest.mock import patch
 
+import pytest
+
 from autoforge.agent.strategy import (
     check_scope_compliance,
     format_context,
@@ -209,8 +211,8 @@ class TestCheckScopeCompliance:
             result = check_scope_compliance(tmp_path, ["drivers/net/memif"])
             assert result == []
 
-    def test_git_failure_returns_empty(self, tmp_path) -> None:
+    def test_git_failure_raises(self, tmp_path) -> None:
         with patch("autoforge.agent.strategy.subprocess.run") as mock_run:
             mock_run.return_value = _fake_run("", returncode=1)
-            result = check_scope_compliance(tmp_path, ["drivers/net/memif/"])
-            assert result == []
+            with pytest.raises(subprocess.CalledProcessError):
+                check_scope_compliance(tmp_path, ["drivers/net/memif/"])

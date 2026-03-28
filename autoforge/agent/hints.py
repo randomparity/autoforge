@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+
+from autoforge.perf.analyze import ProfileSummary
 
 KNOWN_ARCHES: frozenset[str] = frozenset(
     {
@@ -97,7 +98,7 @@ _CACHE_LINE_SIZES: dict[str, int] = {
 }
 
 
-def workload_hints(arch: str, profile_summary: dict[str, Any]) -> str:
+def workload_hints(arch: str, profile_summary: ProfileSummary) -> str:
     """Generate workload-specific optimization suggestions from profiling data.
 
     Args:

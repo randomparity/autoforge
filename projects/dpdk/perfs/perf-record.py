@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoforge.plugins.protocols import ProfileResult
+from autoforge.plugins.protocols import ProfileResult, RunnerConfig
 
 if TYPE_CHECKING:
     from autoforge.campaign import ProjectConfig
@@ -23,7 +23,7 @@ class PerfRecordProfiler:
     def __init__(self) -> None:
         self._config: dict[str, Any] = {}
 
-    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: RunnerConfig) -> None:
         self._config = runner_config.get("profiling", {})
 
     def profile(self, pid: int, duration: int, config: dict[str, Any]) -> ProfileResult:

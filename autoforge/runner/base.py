@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import logging
-import subprocess
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
 
 from autoforge.campaign import (
     CampaignConfig,
@@ -16,8 +14,10 @@ from autoforge.campaign import (
 from autoforge.campaign import (
     project_config as _project_config,
 )
+from autoforge.git_utils import git_pull_with_stash
 from autoforge.plugins.loader import load_component
-from autoforge.plugins.protocols import BuildResult, DeployResult
+from autoforge.plugins.protocols import BuildResult, DeployResult, RunnerConfig
+from autoforge.pointer import REPO_ROOT
 from autoforge.protocol import (
     GIT_TIMEOUT,
     STATUS_BUILDING,
@@ -39,43 +39,6 @@ from autoforge.runner.protocol import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def git_pull() -> bool:
-    """Pull latest changes with rebase. Returns True on success.
-
-    Stashes uncommitted changes before pulling so that a co-located
-    agent (or any other process modifying the working tree) does not
-    block the rebase.
-    """
-    stash_result = subprocess.run(
-        ["git", "stash", "--include-untracked"],
-        capture_output=True,
-        text=True,
-        timeout=GIT_TIMEOUT,
-    )
-    stashed = stash_result.returncode == 0 and "No local changes" not in stash_result.stdout
-
-    result = subprocess.run(
-        ["git", "pull", "--rebase"],
-        capture_output=True,
-        text=True,
-        timeout=GIT_TIMEOUT,
-    )
-    if result.returncode != 0:
-        logger.error("git pull --rebase failed: %s", result.stderr.strip())
-
-    if stashed:
-        pop_result = subprocess.run(
-            ["git", "stash", "pop"],
-            capture_output=True,
-            text=True,
-            timeout=GIT_TIMEOUT,
-        )
-        if pop_result.returncode != 0:
-            logger.warning("git stash pop failed: %s", pop_result.stderr.strip())
-
-    return result.returncode == 0
 
 
 def recover_stale_requests(requests_dir: Path, stale_statuses: frozenset[str]) -> None:
@@ -109,14 +72,14 @@ def _run_build(
     request: TestRequest,
     request_path: Path,
     campaign: CampaignConfig,
-    config: dict[str, Any],
+    config: RunnerConfig,
 ) -> BuildResult | None:
     """Execute the build phase. Returns BuildResult on success, None on failure."""
     proj_cfg = _project_config(campaign)
     proj_name = project_name(campaign)
     paths = config.get("paths", {})
     timeouts = config.get("timeouts", {})
-    source_path = Path(paths.get("source_dir", paths.get("dpdk_src", "/opt/dpdk")))
+    source_path = Path(paths.get("source_dir", "/opt/dpdk"))
     build_dir = Path(paths.get("build_dir", "/tmp/build"))
     build_timeout = int(timeouts.get("build_minutes", 30)) * 60
 
@@ -136,7 +99,7 @@ def _run_build(
             request,
             request_path,
             error="Build failed",
-            log_snippet=build_result.log,
+            build_log_snippet=build_result.log,
             failed_phase="build",
         )
         return None
@@ -145,14 +108,40 @@ def _run_build(
     return build_result
 
 
+def _build_result_from_config(config: RunnerConfig) -> BuildResult:
+    """Construct a BuildResult stub from runner config for split-runner mode."""
+    paths = config.get("paths", {})
+    return BuildResult(
+        success=True,
+        log="",
+        duration_seconds=0,
+        artifacts={"build_dir": paths.get("build_dir", "/tmp/build")},
+    )
+
+
+def _deploy_result_from_config(config: RunnerConfig) -> DeployResult:
+    """Construct a DeployResult stub from runner config for split-runner mode."""
+    paths = config.get("paths", {})
+    return DeployResult(
+        success=True,
+        target_info={"build_dir": paths.get("build_dir", "/tmp/build")},
+    )
+
+
 def _run_deploy(
     request: TestRequest,
     request_path: Path,
     campaign: CampaignConfig,
-    config: dict[str, Any],
-    build_result: BuildResult,
+    config: RunnerConfig,
+    build_result: BuildResult | None = None,
 ) -> DeployResult | None:
-    """Execute the deploy phase. Returns DeployResult on success, None on failure."""
+    """Execute the deploy phase. Returns DeployResult on success, None on failure.
+
+    When build_result is None (split-runner mode), a stub is constructed from config.
+    """
+    if build_result is None:
+        build_result = _build_result_from_config(config)
+
     proj_cfg = _project_config(campaign)
     proj_name = project_name(campaign)
 
@@ -185,10 +174,15 @@ def _run_test(
     request: TestRequest,
     request_path: Path,
     campaign: CampaignConfig,
-    config: dict[str, Any],
-    deploy_result: DeployResult,
+    config: RunnerConfig,
+    deploy_result: DeployResult | None = None,
 ) -> None:
-    """Execute the test phase and update request to completed/failed."""
+    """Execute the test phase and update request to completed/failed.
+
+    When deploy_result is None (split-runner mode), a stub is constructed from config.
+    """
+    if deploy_result is None:
+        deploy_result = _deploy_result_from_config(config)
     proj_cfg = _project_config(campaign)
     proj_name = project_name(campaign)
     timeouts = config.get("timeouts", {})
@@ -232,7 +226,7 @@ class PhaseRunner(ABC):
 
     def __init__(
         self,
-        config: dict[str, Any],
+        config: RunnerConfig,
         campaign: CampaignConfig,
         requests_dir: Path,
     ) -> None:
@@ -241,6 +235,9 @@ class PhaseRunner(ABC):
         self.requests_dir = requests_dir
         self.runner_id = config.get("runner", {}).get("runner_id", "")
         self.poll_interval = int(config.get("runner", {}).get("poll_interval", 30))
+
+    needs_claim: bool = False
+    """Whether this runner must claim requests before executing."""
 
     @abstractmethod
     def execute_phase(self, request: TestRequest, request_path: Path) -> None:
@@ -259,7 +256,7 @@ class PhaseRunner(ABC):
 
         try:
             while True:
-                if not git_pull():
+                if not git_pull_with_stash(REPO_ROOT, timeout=GIT_TIMEOUT):
                     logger.warning("Git pull failed, retrying next cycle")
                     time.sleep(self.poll_interval)
                     continue
@@ -282,7 +279,7 @@ class PhaseRunner(ABC):
                     request.description,
                 )
 
-                if self.watch_status == STATUS_PENDING and not claim(request, request_path):
+                if self.needs_claim and not claim(request, request_path):
                     logger.error(
                         "Failed to claim request %04d, skipping",
                         request.sequence,
@@ -312,6 +309,7 @@ class BuildRunner(PhaseRunner):
     """Watches for pending requests, builds, transitions to built."""
 
     watch_status: StatusLiteral = STATUS_PENDING
+    needs_claim: bool = True
     stale_statuses = frozenset({STATUS_CLAIMED, STATUS_BUILDING, STATUS_BUILT})
 
     def execute_phase(self, request: TestRequest, request_path: Path) -> None:
@@ -325,15 +323,7 @@ class DeployRunner(PhaseRunner):
     stale_statuses = frozenset({STATUS_DEPLOYING, STATUS_DEPLOYED})
 
     def execute_phase(self, request: TestRequest, request_path: Path) -> None:
-        build_result = BuildResult(
-            success=True,
-            log="",
-            duration_seconds=0,
-            artifacts={
-                "build_dir": self.config.get("paths", {}).get("build_dir", "/tmp/build"),
-            },
-        )
-        _run_deploy(request, request_path, self.campaign, self.config, build_result)
+        _run_deploy(request, request_path, self.campaign, self.config)
 
 
 class TestRunner(PhaseRunner):
@@ -343,19 +333,14 @@ class TestRunner(PhaseRunner):
     stale_statuses = frozenset({STATUS_RUNNING})
 
     def execute_phase(self, request: TestRequest, request_path: Path) -> None:
-        deploy_result = DeployResult(
-            success=True,
-            target_info={
-                "build_dir": self.config.get("paths", {}).get("build_dir", "/tmp/build"),
-            },
-        )
-        _run_test(request, request_path, self.campaign, self.config, deploy_result)
+        _run_test(request, request_path, self.campaign, self.config)
 
 
 class FullRunner(PhaseRunner):
     """Runs all phases sequentially (single-machine mode)."""
 
     watch_status: StatusLiteral = STATUS_PENDING
+    needs_claim: bool = True
     stale_statuses = frozenset(
         {
             STATUS_CLAIMED,

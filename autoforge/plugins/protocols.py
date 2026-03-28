@@ -4,11 +4,48 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, TypedDict, runtime_checkable
 
 if TYPE_CHECKING:
     from autoforge.campaign import CampaignConfig, ProjectConfig
     from autoforge.protocol import Direction, TestRequest
+
+
+class PathsConfig(TypedDict, total=False):
+    """Well-known [paths] section of runner config."""
+
+    source_dir: str
+    build_dir: str
+
+
+class TimeoutsConfig(TypedDict, total=False):
+    """Well-known [timeouts] section of runner config."""
+
+    build_minutes: int
+    test_minutes: int
+
+
+class RunnerSectionConfig(TypedDict, total=False):
+    """Well-known [runner] section of runner config."""
+
+    phase: str
+    log_level: str
+    log_file: str
+    poll_interval: int
+    runner_id: str
+
+
+class RunnerConfig(TypedDict, total=False):
+    """Top-level runner configuration loaded from runner.toml.
+
+    Well-known sections are typed; plugin-specific sections
+    (build, deploy, bench, testpmd, profiling, etc.) are accessed
+    via the dict[str, Any] base and vary per project.
+    """
+
+    paths: PathsConfig
+    timeouts: TimeoutsConfig
+    runner: RunnerSectionConfig
 
 
 @dataclass
@@ -62,7 +99,7 @@ class Builder(Protocol):
 
     name: str
 
-    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: RunnerConfig) -> None:
         """Store configuration for subsequent build calls."""
         ...
 
@@ -77,7 +114,7 @@ class Deployer(Protocol):
 
     name: str
 
-    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: RunnerConfig) -> None:
         """Store configuration for subsequent deploy calls."""
         ...
 
@@ -92,7 +129,7 @@ class Tester(Protocol):
 
     name: str
 
-    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: RunnerConfig) -> None:
         """Store configuration for subsequent test calls."""
         ...
 
@@ -107,7 +144,7 @@ class Profiler(Protocol):
 
     name: str
 
-    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: RunnerConfig) -> None:
         """Store configuration for subsequent profile calls."""
         ...
 
@@ -130,7 +167,7 @@ class Judge(Protocol):
 
     name: str
 
-    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: RunnerConfig) -> None:
         """Store configuration for subsequent judge calls."""
         ...
 

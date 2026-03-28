@@ -57,49 +57,34 @@ class TestPhaseRunners:
 
 
 class TestMain:
+    @pytest.mark.parametrize(
+        ("phase", "runner_class"),
+        [
+            ("all", FullRunner),
+            ("build", BuildRunner),
+        ],
+    )
     @patch("autoforge.runner.service.load_config")
     @patch("autoforge.runner.service.resolve_campaign_path")
     @patch("autoforge.runner.service.load_campaign")
     @patch("autoforge.runner.service.load_pointer")
     @patch("autoforge.runner.service.setup_logging")
-    def test_selects_full_runner_for_phase_all(
+    def test_selects_runner_for_phase(
         self,
         mock_logging,
         mock_pointer,
         mock_campaign,
         mock_resolve,
         mock_config,
+        phase: str,
+        runner_class: type,
     ) -> None:
-        mock_config.return_value = {"runner": {"phase": "all"}}
+        mock_config.return_value = {"runner": {"phase": phase}}
         mock_resolve.return_value = Path("/fake/campaign.toml")
         mock_campaign.return_value = {}
         mock_pointer.return_value = {"project": "dpdk", "sprint": "test"}
 
-        with patch.object(FullRunner, "poll_loop") as mock_poll:
-            from autoforge.runner.service import main
-
-            main()
-            mock_poll.assert_called_once()
-
-    @patch("autoforge.runner.service.load_config")
-    @patch("autoforge.runner.service.resolve_campaign_path")
-    @patch("autoforge.runner.service.load_campaign")
-    @patch("autoforge.runner.service.load_pointer")
-    @patch("autoforge.runner.service.setup_logging")
-    def test_selects_build_runner_for_phase_build(
-        self,
-        mock_logging,
-        mock_pointer,
-        mock_campaign,
-        mock_resolve,
-        mock_config,
-    ) -> None:
-        mock_config.return_value = {"runner": {"phase": "build"}}
-        mock_resolve.return_value = Path("/fake/campaign.toml")
-        mock_campaign.return_value = {}
-        mock_pointer.return_value = {"project": "dpdk", "sprint": "test"}
-
-        with patch.object(BuildRunner, "poll_loop") as mock_poll:
+        with patch.object(runner_class, "poll_loop") as mock_poll:
             from autoforge.runner.service import main
 
             main()

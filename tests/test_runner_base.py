@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from autoforge.agent.protocol import create_request
+from autoforge.git_utils import git_pull_with_stash
 from autoforge.plugins.protocols import BuildResult, DeployResult, TestResult
 from autoforge.protocol import (
     STATUS_BUILDING,
@@ -22,7 +23,6 @@ from autoforge.runner.base import (
     DeployRunner,
     FullRunner,
     TestRunner,
-    git_pull,
     recover_stale_requests,
 )
 
@@ -59,46 +59,49 @@ def _make_request(
     return req, path
 
 
-class TestGitPull:
-    @patch("autoforge.runner.base.subprocess.run")
-    def test_success_returns_true(self, mock_run) -> None:
+class TestGitPullWithStash:
+    @patch("autoforge.git_utils.subprocess.run")
+    def test_success_returns_true(self, mock_run, tmp_path) -> None:
         mock_run.return_value = subprocess.CompletedProcess(
             [], 0, stdout="No local changes to save", stderr=""
         )
-        assert git_pull() is True
+        assert git_pull_with_stash(tmp_path) is True
         # stash (no-op) + pull = 2 calls (no pop since nothing stashed)
         assert mock_run.call_count == 2
 
-    @patch("autoforge.runner.base.subprocess.run")
-    def test_failure_returns_false(self, mock_run) -> None:
+    @patch("autoforge.git_utils.subprocess.run")
+    def test_failure_returns_false(self, mock_run, tmp_path) -> None:
+        root = str(tmp_path)
+
         def side_effect(*args, **kwargs):
             cmd = args[0]
-            if cmd == ["git", "pull", "--rebase"]:
+            if cmd == ["git", "-C", root, "pull", "--rebase"]:
                 return subprocess.CompletedProcess([], 1, stdout="", stderr="error")
             return subprocess.CompletedProcess([], 0, stdout="No local changes to save", stderr="")
 
         mock_run.side_effect = side_effect
-        assert git_pull() is False
+        assert git_pull_with_stash(tmp_path) is False
 
-    @patch("autoforge.runner.base.subprocess.run")
-    def test_stashes_and_pops_dirty_tree(self, mock_run) -> None:
+    @patch("autoforge.git_utils.subprocess.run")
+    def test_stashes_and_pops_dirty_tree(self, mock_run, tmp_path) -> None:
+        root = str(tmp_path)
         call_log = []
 
         def side_effect(*args, **kwargs):
             cmd = args[0]
             call_log.append(cmd)
-            if cmd == ["git", "stash", "--include-untracked"]:
+            if cmd == ["git", "-C", root, "stash", "--include-untracked"]:
                 return subprocess.CompletedProcess(
                     [], 0, stdout="Saved working directory", stderr=""
                 )
             return subprocess.CompletedProcess([], 0, stdout="", stderr="")
 
         mock_run.side_effect = side_effect
-        assert git_pull() is True
+        assert git_pull_with_stash(tmp_path) is True
         assert call_log == [
-            ["git", "stash", "--include-untracked"],
-            ["git", "pull", "--rebase"],
-            ["git", "stash", "pop"],
+            ["git", "-C", root, "stash", "--include-untracked"],
+            ["git", "-C", root, "pull", "--rebase"],
+            ["git", "-C", root, "stash", "pop"],
         ]
 
 

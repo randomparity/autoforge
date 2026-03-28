@@ -29,8 +29,8 @@ def append_result(
     metric: float | None,
     status: str,
     description: str,
-    path: Path,
     *,
+    path: Path,
     tags: list[str] | None = None,
 ) -> None:
     """Append an iteration result to the TSV history file.
@@ -78,6 +78,38 @@ def load_history(path: Path) -> list[dict[str, str]]:
         return []
 
 
+def score_rows(rows: list[dict[str, str]]) -> list[tuple[float, dict[str, str]]]:
+    """Return rows that have a parseable numeric metric value.
+
+    Args:
+        rows: History rows as returned by load_history().
+
+    Returns:
+        List of (metric_float, row_dict) pairs in file order.
+    """
+    result = []
+    for row in rows:
+        val = row.get("metric_value", "")
+        if val:
+            try:
+                result.append((float(val), row))
+            except ValueError:
+                continue
+    return result
+
+
+def scored_history(path: Path) -> list[tuple[float, dict[str, str]]]:
+    """Return history rows from a file that have a parseable numeric metric value.
+
+    Args:
+        path: Path to the results.tsv file.
+
+    Returns:
+        List of (metric_float, row_dict) pairs in file order.
+    """
+    return score_rows(load_history(path))
+
+
 def best_result(
     path: Path,
     direction: Direction = "maximize",
@@ -91,19 +123,9 @@ def best_result(
     Returns:
         The best row dict, or None if no valid metrics exist.
     """
-    rows = load_history(path)
-    scored = []
-    for row in rows:
-        val = row.get("metric_value", "")
-        if val:
-            try:
-                scored.append((float(val), row))
-            except ValueError:
-                continue
-
+    scored = scored_history(path)
     if not scored:
         return None
-
     if direction == "minimize":
         return min(scored, key=lambda x: x[0])[1]
     return max(scored, key=lambda x: x[0])[1]
@@ -111,7 +133,6 @@ def best_result(
 
 def rolling_average_result(
     path: Path,
-    direction: Direction = "maximize",
     window: int = 5,
 ) -> float | None:
     """Return the rolling average of the last N metric values.
@@ -122,27 +143,16 @@ def rolling_average_result(
 
     Args:
         path: Path to the results.tsv file.
-        direction: Unused, kept for API symmetry with best_result.
         window: Number of recent results to average.
 
     Returns:
         The average metric value, or None if no valid metrics exist.
     """
-    rows = load_history(path)
-    values: list[float] = []
-    for row in rows:
-        val = row.get("metric_value", "")
-        if val:
-            try:
-                values.append(float(val))
-            except ValueError:
-                continue
-
-    if not values:
+    scored = scored_history(path)
+    if not scored:
         return None
-
-    recent = values[-window:]
-    return sum(recent) / len(recent)
+    recent = scored[-window:]
+    return sum(v for v, _ in recent) / len(recent)
 
 
 def append_failure(

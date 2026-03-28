@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from pathlib import Path
 from typing import Any, TypedDict
+
+from autoforge.perf.analyze import leaf_percentages
 
 
 class StackDiff(TypedDict):
@@ -51,21 +52,6 @@ def load_folded(path: Path) -> dict[str, int]:
     return stacks
 
 
-def _leaf_pcts(stacks: dict[str, int]) -> dict[str, float]:
-    """Compute per-leaf-function percentage from a stack dict."""
-    func_counts: Counter[str] = Counter()
-    total = 0
-    for stack, count in stacks.items():
-        frames = stack.split(";")
-        leaf = frames[-1]
-        func_counts[leaf] += count
-        total += count
-
-    if total == 0:
-        return {}
-    return {name: count / total * 100 for name, count in func_counts.items()}
-
-
 def diff_stacks(
     baseline: dict[str, int],
     current: dict[str, int],
@@ -81,8 +67,8 @@ def diff_stacks(
     Returns:
         Dict with 'significant_changes' list and 'net_assessment'.
     """
-    base_pcts = _leaf_pcts(baseline)
-    curr_pcts = _leaf_pcts(current)
+    base_pcts = leaf_percentages(baseline)
+    curr_pcts = leaf_percentages(current)
     all_symbols = set(base_pcts) | set(curr_pcts)
 
     changes = []

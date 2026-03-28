@@ -34,6 +34,165 @@ def _build_cmd(args: list[str], *, sudo: bool) -> list[str]:
     return args
 
 
+def _run_concurrent_perf(
+    record_cmd: list[str],
+    stat_cmd: list[str],
+    timeout: float,
+) -> tuple[int, bytes, int, bytes]:
+    """Spawn perf record and perf stat concurrently and collect their output.
+
+    Args:
+        record_cmd: Full argv for ``perf record``.
+        stat_cmd: Full argv for ``perf stat``.
+        timeout: Maximum seconds to wait for both processes to finish.
+
+    Returns:
+        ``(record_returncode, record_stderr, stat_returncode, stat_stderr)``.
+
+    Raises:
+        OSError: If either process fails to start (the other is killed first).
+        subprocess.TimeoutExpired: If the deadline elapses before both finish.
+    """
+    record_proc = subprocess.Popen(
+        record_cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    try:
+        stat_proc = subprocess.Popen(
+            stat_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except OSError:
+        record_proc.kill()
+        record_proc.wait(timeout=10)
+        raise
+
+    try:
+        deadline = time.monotonic() + timeout
+        _, record_stderr = record_proc.communicate(timeout=timeout)
+        remaining = max(5.0, deadline - time.monotonic())
+        _, stat_stderr = stat_proc.communicate(timeout=remaining)
+    except subprocess.TimeoutExpired:
+        record_proc.kill()
+        stat_proc.kill()
+        record_proc.wait(timeout=10)
+        stat_proc.wait(timeout=10)
+        raise
+
+    return record_proc.returncode, record_stderr, stat_proc.returncode, stat_stderr
+
+
+def _extract_folded_stacks(
+    perf_data: Path,
+    output_dir: Path,
+    *,
+    sudo: bool,
+    timeout: float,
+) -> tuple[dict[str, int], str | None]:
+    """Run ``perf script``, fold the stacks, and write them to disk.
+
+    Args:
+        perf_data: Path to the ``perf.data`` file produced by ``perf record``.
+        output_dir: Directory where ``stacks.folded`` will be written.
+        sudo: Whether to prefix ``perf script`` with ``sudo``.
+        timeout: Maximum seconds to allow ``perf script`` to run.
+
+    Returns:
+        ``(stacks, None)`` on success, or ``({}, error_message)`` on failure.
+    """
+    script_cmd = _build_cmd(["perf", "script", "-i", str(perf_data)], sudo=sudo)
+    script_result = subprocess.run(
+        script_cmd,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    logger.debug(
+        "perf script rc=%d, stdout=%d bytes, stderr=%s",
+        script_result.returncode,
+        len(script_result.stdout),
+        script_result.stderr[:300],
+    )
+    if script_result.returncode != 0:
+        return {}, f"perf script failed: {script_result.stderr[:500]}"
+
+    stacks = fold_stacks(script_result.stdout)
+    try:
+        write_folded(stacks, output_dir / "stacks.folded")
+    except OSError as exc:
+        return {}, f"Failed to write folded stacks: {exc}"
+
+    return stacks, None
+
+
+def _build_perf_cmds(
+    pid: int,
+    duration: int,
+    perf_data: Path,
+    *,
+    arch: str | None,
+    frequency: int,
+    sudo: bool,
+    cpus: str | None,
+) -> tuple[list[str], list[str]]:
+    """Build argv lists for concurrent perf record + perf stat invocations.
+
+    Args:
+        pid: Target process ID (used when ``cpus`` is None).
+        duration: Capture duration in seconds.
+        perf_data: Output path for ``perf record`` data file.
+        arch: Architecture key for event selection; auto-detected if None.
+        frequency: Sampling frequency in Hz.
+        sudo: Whether to prefix commands with ``sudo``.
+        cpus: CPU list for system-wide profiling (e.g. ``"4-12"``).
+
+    Returns:
+        ``(record_cmd, stat_cmd)`` as argv lists.
+    """
+    profile = load_arch_profile(arch)
+    events = list(profile.get("events", {}).values()) or COMMON_EVENTS
+
+    if cpus:
+        target_args: list[str] = ["-a", "-C", cpus]
+        logger.info("Profiling CPUs %s (system-wide on those cores)", cpus)
+    else:
+        target_args = ["-p", str(pid)]
+
+    record_cmd = _build_cmd(
+        [
+            "perf",
+            "record",
+            "--call-graph",
+            "dwarf,16384",
+            "-F",
+            str(frequency),
+            *target_args,
+            "-o",
+            str(perf_data),
+            "--",
+            "sleep",
+            str(duration),
+        ],
+        sudo=sudo,
+    )
+    stat_cmd = _build_cmd(
+        [
+            "perf",
+            "stat",
+            "-e",
+            ",".join(events),
+            *target_args,
+            "--",
+            "sleep",
+            str(duration),
+        ],
+        sudo=sudo,
+    )
+    return record_cmd, stat_cmd
+
+
 def profile_pid(
     pid: int,
     duration: int,
@@ -72,87 +231,22 @@ def profile_pid(
     perf_data = output_dir / "perf.data"
     timeout = duration + PERF_TIMEOUT_MARGIN
 
-    profile = load_arch_profile(arch)
-    events = list(profile.get("events", {}).values()) or COMMON_EVENTS
-
-    # Use CPU-based targeting when lcores are specified (captures all threads),
-    # otherwise fall back to PID-based targeting.
-    if cpus:
-        target_args = ["-a", "-C", cpus]
-        logger.info("Profiling CPUs %s (system-wide on those cores)", cpus)
-    else:
-        target_args = ["-p", str(pid)]
-
-    # Both must run concurrently to capture the same execution window
-    record_cmd = _build_cmd(
-        [
-            "perf",
-            "record",
-            "--call-graph",
-            "dwarf,16384",
-            "-F",
-            str(frequency),
-            *target_args,
-            "-o",
-            str(perf_data),
-            "--",
-            "sleep",
-            str(duration),
-        ],
-        sudo=sudo,
-    )
-    stat_cmd = _build_cmd(
-        [
-            "perf",
-            "stat",
-            "-e",
-            ",".join(events),
-            *target_args,
-            "--",
-            "sleep",
-            str(duration),
-        ],
-        sudo=sudo,
+    record_cmd, stat_cmd = _build_perf_cmds(
+        pid, duration, perf_data, arch=arch, frequency=frequency, sudo=sudo, cpus=cpus
     )
 
     logger.info("Starting perf record (pid=%d, %ds, %dHz)", pid, duration, frequency)
     try:
-        record_proc = subprocess.Popen(
-            record_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+        record_rc, record_stderr, stat_rc, stat_stderr = _run_concurrent_perf(
+            record_cmd, stat_cmd, timeout
         )
     except OSError as exc:
         return PerfCaptureResult(
             success=False,
-            error=f"Failed to start perf record: {exc}",
+            error=str(exc),
             duration_seconds=time.monotonic() - start,
         )
-    try:
-        stat_proc = subprocess.Popen(
-            stat_cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-    except OSError as exc:
-        record_proc.kill()
-        record_proc.wait(timeout=10)
-        return PerfCaptureResult(
-            success=False,
-            error=f"Failed to start perf stat: {exc}",
-            duration_seconds=time.monotonic() - start,
-        )
-
-    try:
-        deadline = time.monotonic() + timeout
-        _, record_stderr = record_proc.communicate(timeout=timeout)
-        remaining = max(5.0, deadline - time.monotonic())
-        _, stat_stderr = stat_proc.communicate(timeout=remaining)
     except subprocess.TimeoutExpired:
-        record_proc.kill()
-        stat_proc.kill()
-        record_proc.wait(timeout=10)
-        stat_proc.wait(timeout=10)
         return PerfCaptureResult(
             success=False,
             error="perf timed out",
@@ -162,61 +256,35 @@ def profile_pid(
     record_stderr_text = record_stderr.decode(errors="replace")
     stat_stderr_text = stat_stderr.decode(errors="replace")
 
-    logger.debug("perf record rc=%d stderr: %s", record_proc.returncode, record_stderr_text[:500])
-    logger.debug("perf stat rc=%d stderr: %s", stat_proc.returncode, stat_stderr_text[:500])
+    logger.debug("perf record rc=%d stderr: %s", record_rc, record_stderr_text[:500])
+    logger.debug("perf stat rc=%d stderr: %s", stat_rc, stat_stderr_text[:500])
 
     if perf_data.exists():
         logger.debug("perf.data size: %d bytes", perf_data.stat().st_size)
     else:
         logger.warning("perf.data not found at %s", perf_data)
 
-    if record_proc.returncode != 0:
+    if record_rc != 0:
         return PerfCaptureResult(
             success=False,
             error=f"perf record failed: {record_stderr_text[:500]}",
             duration_seconds=time.monotonic() - start,
         )
 
-    if stat_proc.returncode != 0:
+    if stat_rc != 0:
         # Non-fatal: perf stat counters are supplementary to perf record.
         # The profile result is still usable from the recorded data alone.
         logger.warning(
             "perf stat failed (rc=%d), continuing without counters: %s",
-            stat_proc.returncode,
+            stat_rc,
             stat_stderr_text[:300],
         )
 
-    script_cmd = _build_cmd(
-        ["perf", "script", "-i", str(perf_data)],
-        sudo=sudo,
-    )
-    script_result = subprocess.run(
-        script_cmd,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
-    logger.debug(
-        "perf script rc=%d, stdout=%d bytes, stderr=%s",
-        script_result.returncode,
-        len(script_result.stdout),
-        script_result.stderr[:300],
-    )
-    if script_result.returncode != 0:
+    stacks, error = _extract_folded_stacks(perf_data, output_dir, sudo=sudo, timeout=timeout)
+    if error is not None:
         return PerfCaptureResult(
             success=False,
-            error=f"perf script failed: {script_result.stderr[:500]}",
-            duration_seconds=time.monotonic() - start,
-        )
-
-    stacks = fold_stacks(script_result.stdout)
-    folded_path = output_dir / "stacks.folded"
-    try:
-        write_folded(stacks, folded_path)
-    except OSError as exc:
-        return PerfCaptureResult(
-            success=False,
-            error=f"Failed to write folded stacks: {exc}",
+            error=error,
             duration_seconds=time.monotonic() - start,
         )
 

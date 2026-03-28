@@ -8,6 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
+from autoforge.agent.sprint import OPT_BRANCH_RE
+from autoforge.campaign import optimization_branch, project_config
+from autoforge.campaign import submodule_path as get_submodule_path
 from autoforge.config import load_toml_with_local
 from autoforge.plugins.loader import CATEGORY_MAP
 from autoforge.pointer import REPO_ROOT
@@ -445,25 +448,25 @@ def check_runner(
             )
         )
 
-    dpdk_src = paths.get("dpdk_src", "")
-    if dpdk_src and Path(dpdk_src).is_dir():
+    source_dir = paths.get("source_dir", "")
+    if source_dir and Path(source_dir).is_dir():
         results.append(
             CheckResult(
-                "runner.dpdk_src",
+                "runner.source_dir",
                 "pass",
-                f"{dpdk_src} exists",
+                f"{source_dir} exists",
                 "runner",
-                path=dpdk_src,
+                path=source_dir,
             )
         )
-    elif dpdk_src:
+    elif source_dir:
         results.append(
             CheckResult(
-                "runner.dpdk_src",
+                "runner.source_dir",
                 "warn",
-                f"{dpdk_src} not found on disk",
+                f"{source_dir} not found on disk",
                 "runner",
-                path=dpdk_src,
+                path=source_dir,
             )
         )
 
@@ -565,7 +568,7 @@ def check_plugins(
 ) -> list[CheckResult]:
     """Validate plugin files referenced by the campaign."""
     results: list[CheckResult] = []
-    proj = campaign_data.get("project", {})
+    proj = project_config(campaign_data)
 
     for category, directory in CATEGORY_MAP.items():
         name = proj.get(category, "")
@@ -936,15 +939,12 @@ def format_effective_config(config: dict[str, Any]) -> str:
 def check_optimization_branch(
     project: str,
     sprint: str,
-    campaign_data: dict[str, Any],
+    campaign_data: CampaignConfig,
     root: Path = REPO_ROOT,
 ) -> list[CheckResult]:
     """Validate the optimization branch setting in campaign config (agent check)."""
-    from autoforge.agent.sprint import OPT_BRANCH_RE  # avoid circular at module level
-
     results: list[CheckResult] = []
-    proj = campaign_data.get("project", {})
-    branch = proj.get("optimization_branch", "")
+    branch = optimization_branch(campaign_data)
     rel = f"projects/{project}/sprints/{sprint}/campaign.toml"
 
     if not branch:
@@ -982,7 +982,7 @@ def check_optimization_branch(
         )
 
     # Advisory: check if the branch exists in the submodule
-    submodule = proj.get("submodule_path", "")
+    submodule = get_submodule_path(campaign_data)
     if submodule:
         sub_path = root / submodule
         if sub_path.is_dir() and (sub_path / ".git").exists():
@@ -1062,7 +1062,7 @@ def run_doctor(
 
     # Load campaign data for plugin checks (best-effort)
     campaign_path = root / "projects" / project / "sprints" / sprint / "campaign.toml"
-    campaign_data: dict[str, Any] = {}
+    campaign_data: CampaignConfig = {}
     if campaign_path.is_file():
         data, _ = _load_toml(campaign_path)
         if data is not None:

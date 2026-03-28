@@ -5,11 +5,11 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any
 
 from autoforge.campaign import load_campaign, resolve_campaign_path
 from autoforge.config import load_toml_with_local
 from autoforge.logging_config import setup_logging
+from autoforge.plugins.protocols import RunnerConfig
 from autoforge.pointer import REPO_ROOT, load_pointer
 from autoforge.runner.base import (
     BuildRunner,
@@ -39,7 +39,7 @@ def resolve_config_path(explicit: str | None = None) -> str:
     return str(REPO_ROOT / "projects" / pointer["project"] / "runner.toml")
 
 
-def load_config(path: str | None = None) -> dict[str, Any]:
+def load_config(path: str | None = None) -> RunnerConfig:
     """Load runner configuration from a TOML file.
 
     The base ``.toml`` file contains shared defaults (tracked in git).

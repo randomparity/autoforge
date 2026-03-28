@@ -9,6 +9,7 @@ from pathlib import Path
 
 from autoforge.agent.history import append_failure
 from autoforge.agent.metric import compare_metric
+from autoforge.git_utils import git_push_with_retry
 from autoforge.protocol import GIT_TIMEOUT, Direction
 
 logger = logging.getLogger(__name__)
@@ -103,37 +104,8 @@ def git_add_commit_push(
     if dry_run:
         return
 
-    for attempt in range(retries):
-        result = subprocess.run(
-            ["git", "push"],
-            capture_output=True,
-            text=True,
-            timeout=GIT_TIMEOUT,
-        )
-        if result.returncode == 0:
-            return
-
-        logger.warning(
-            "Push failed (attempt %d/%d): %s",
-            attempt + 1,
-            retries,
-            result.stderr.strip(),
-        )
-        if attempt < retries - 1:
-            rebase = subprocess.run(
-                ["git", "pull", "--rebase"],
-                capture_output=True,
-                text=True,
-                timeout=GIT_TIMEOUT,
-            )
-            if rebase.returncode != 0:
-                logger.error(
-                    "Pull --rebase failed: %s",
-                    rebase.stderr.strip(),
-                )
-                raise subprocess.CalledProcessError(rebase.returncode, "git pull --rebase")
-
-    raise subprocess.CalledProcessError(result.returncode, "git push")
+    if not git_push_with_retry(max_retries=retries):
+        raise subprocess.CalledProcessError(1, "git push")
 
 
 def push_submodule(source_path: Path, branch: str) -> None:

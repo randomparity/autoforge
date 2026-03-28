@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from autoforge.git_utils import git_push_with_retry
 from autoforge.protocol import (
     GIT_TIMEOUT,
     STATUS_CLAIMED,
@@ -50,31 +51,7 @@ def _git_commit_push(path: Path, message: str, retries: int = 3) -> bool:
         logger.error("git add/commit failed for %s: %s", path, exc.stderr or exc)
         return False
 
-    for attempt in range(retries):
-        result = subprocess.run(
-            ["git", "push"],
-            capture_output=True,
-            text=True,
-            timeout=GIT_TIMEOUT,
-        )
-        if result.returncode == 0:
-            return True
-
-        logger.warning(
-            "Push failed (attempt %d/%d): %s", attempt + 1, retries, result.stderr.strip()
-        )
-        if attempt < retries - 1:
-            rebase = subprocess.run(
-                ["git", "pull", "--rebase"],
-                capture_output=True,
-                text=True,
-                timeout=GIT_TIMEOUT,
-            )
-            if rebase.returncode != 0:
-                logger.error("Pull --rebase failed: %s", rebase.stderr.strip())
-                return False
-
-    return False
+    return git_push_with_retry(max_retries=retries)
 
 
 def find_by_status(requests_dir: Path, status: StatusLiteral) -> tuple[TestRequest, Path] | None:
@@ -225,8 +202,8 @@ def fail(
     request: TestRequest,
     request_path: Path,
     error: str,
-    log_snippet: str | None = None,
     *,
+    build_log_snippet: str | None = None,
     deploy_log_snippet: str | None = None,
     test_log_snippet: str | None = None,
     failed_phase: str | None = None,
@@ -237,7 +214,7 @@ def fail(
         request: The test request to mark as failed.
         request_path: Path to the request JSON file.
         error: Human-readable error description.
-        log_snippet: Optional truncated build log.
+        build_log_snippet: Optional truncated build log.
         deploy_log_snippet: Optional truncated deploy log.
         test_log_snippet: Optional truncated test log.
         failed_phase: Phase that caused the failure (build/deploy/test/claim).
@@ -247,7 +224,7 @@ def fail(
         STATUS_FAILED,
         request_path,
         error=error,
-        build_log_snippet=log_snippet,
+        build_log_snippet=build_log_snippet,
         deploy_log_snippet=deploy_log_snippet,
         test_log_snippet=test_log_snippet,
         failed_phase=failed_phase,

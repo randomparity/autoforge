@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import logging
-import shutil
 import subprocess
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from autoforge.plugins.protocols import BuildResult, DeployResult
+from autoforge.plugins.protocols import BuildResult, DeployResult, RunnerConfig
+from projects.vllm._utils import resolve_runtime
 
 if TYPE_CHECKING:
     from autoforge.campaign import ProjectConfig
@@ -19,25 +19,14 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _resolve_runtime(configured: str = "auto") -> str:
-    if configured and configured != "auto":
-        return configured
-    if shutil.which("docker"):
-        return "docker"
-    if shutil.which("podman"):
-        return "podman"
-    msg = "No container runtime found. Install docker or podman."
-    raise RuntimeError(msg)
-
-
 class ContainerGpuDeployer:
     """Deploys vLLM in a container with GPU passthrough (Docker or Podman)."""
 
     name = "container-gpu"
 
-    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: RunnerConfig) -> None:
         cfg = runner_config.get("deploy", {})
-        self._runtime = _resolve_runtime(cfg.get("runtime", "auto"))
+        self._runtime = resolve_runtime(cfg.get("runtime", "auto"))
         self._model = cfg.get("model", "Qwen/Qwen3-0.6B")
         self._port = int(cfg.get("port", 8000))
         self._container_name = cfg.get("container_name", "vllm-bench")
