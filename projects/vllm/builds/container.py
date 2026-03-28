@@ -7,9 +7,9 @@ import re
 import subprocess
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from autoforge.plugins.protocols import BuildResult
+from autoforge.plugins.protocols import BuildResult, RunnerConfig
 from projects.vllm._utils import resolve_runtime
 
 if TYPE_CHECKING:
@@ -23,7 +23,7 @@ class VllmContainerBuilder:
 
     name = "container"
 
-    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: RunnerConfig) -> None:
         cfg = runner_config.get("build", {})
         self._mode = cfg.get("mode", "prebuilt")
         self._base_image = cfg.get("base_image", "docker.io/vllm/vllm-openai:latest")

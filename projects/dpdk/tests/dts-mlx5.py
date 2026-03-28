@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoforge.plugins.protocols import DeployResult, TestResult
+from autoforge.plugins.protocols import DeployResult, RunnerConfig, TestResult
 from autoforge.protocol import extract_metric
 
 if TYPE_CHECKING:
@@ -39,7 +39,7 @@ class DtsMlx5Tester:
     def __init__(self) -> None:
         self._runner_config: dict[str, Any] = {}
 
-    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: RunnerConfig) -> None:
         self._runner_config = runner_config
 
     def test(self, deploy_result: DeployResult, timeout: int) -> TestResult:

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from autoforge.plugins.protocols import BuildResult, DeployResult
+from autoforge.plugins.protocols import BuildResult, DeployResult, RunnerConfig
 
 if TYPE_CHECKING:
     from autoforge.campaign import ProjectConfig
@@ -15,7 +15,7 @@ class LocalDeployer:
 
     name = "local"
 
-    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: RunnerConfig) -> None:
         pass
 
     def deploy(self, build_result: BuildResult) -> DeployResult:

@@ -8,9 +8,9 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
-from autoforge.plugins.protocols import BuildResult, DeployResult
+from autoforge.plugins.protocols import BuildResult, DeployResult, RunnerConfig
 from projects.vllm._utils import resolve_runtime
 
 if TYPE_CHECKING:
@@ -24,7 +24,7 @@ class ContainerGpuDeployer:
 
     name = "container-gpu"
 
-    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: RunnerConfig) -> None:
         cfg = runner_config.get("deploy", {})
         self._runtime = resolve_runtime(cfg.get("runtime", "auto"))
         self._model = cfg.get("model", "Qwen/Qwen3-0.6B")

@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoforge.plugins.protocols import BuildResult
+from autoforge.plugins.protocols import BuildResult, RunnerConfig
 
 if TYPE_CHECKING:
     from autoforge.campaign import ProjectConfig
@@ -33,7 +33,7 @@ class LocalBuilder:
     def __init__(self) -> None:
         self._build_config: dict[str, Any] = {}
 
-    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: RunnerConfig) -> None:
         self._build_config = runner_config.get("build", {})
 
     def build(self, source_path: Path, commit: str, build_dir: Path, timeout: int) -> BuildResult:

@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from autoforge.plugins.protocols import DeployResult, TestResult
+from autoforge.plugins.protocols import DeployResult, RunnerConfig, TestResult
 
 if TYPE_CHECKING:
     from autoforge.campaign import ProjectConfig
@@ -44,7 +44,7 @@ class VllmServingBenchTester:
 
     name = "bench-serving"
 
-    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: RunnerConfig) -> None:
         cfg = runner_config.get("bench", {})
         self._num_prompts = int(cfg.get("num_prompts", 100))
         self._dataset = cfg.get("dataset_name", "random")

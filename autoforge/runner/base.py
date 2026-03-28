@@ -6,7 +6,6 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any
 
 from autoforge.campaign import (
     CampaignConfig,
@@ -17,7 +16,7 @@ from autoforge.campaign import (
 )
 from autoforge.git_utils import git_pull_with_stash
 from autoforge.plugins.loader import load_component
-from autoforge.plugins.protocols import BuildResult, DeployResult
+from autoforge.plugins.protocols import BuildResult, DeployResult, RunnerConfig
 from autoforge.pointer import REPO_ROOT
 from autoforge.protocol import (
     GIT_TIMEOUT,
@@ -73,7 +72,7 @@ def _run_build(
     request: TestRequest,
     request_path: Path,
     campaign: CampaignConfig,
-    config: dict[str, Any],
+    config: RunnerConfig,
 ) -> BuildResult | None:
     """Execute the build phase. Returns BuildResult on success, None on failure."""
     proj_cfg = _project_config(campaign)
@@ -109,7 +108,7 @@ def _run_build(
     return build_result
 
 
-def _build_result_from_config(config: dict[str, Any]) -> BuildResult:
+def _build_result_from_config(config: RunnerConfig) -> BuildResult:
     """Construct a BuildResult stub from runner config for split-runner mode."""
     paths = config.get("paths", {})
     return BuildResult(
@@ -120,7 +119,7 @@ def _build_result_from_config(config: dict[str, Any]) -> BuildResult:
     )
 
 
-def _deploy_result_from_config(config: dict[str, Any]) -> DeployResult:
+def _deploy_result_from_config(config: RunnerConfig) -> DeployResult:
     """Construct a DeployResult stub from runner config for split-runner mode."""
     paths = config.get("paths", {})
     return DeployResult(
@@ -133,7 +132,7 @@ def _run_deploy(
     request: TestRequest,
     request_path: Path,
     campaign: CampaignConfig,
-    config: dict[str, Any],
+    config: RunnerConfig,
     build_result: BuildResult | None = None,
 ) -> DeployResult | None:
     """Execute the deploy phase. Returns DeployResult on success, None on failure.
@@ -175,7 +174,7 @@ def _run_test(
     request: TestRequest,
     request_path: Path,
     campaign: CampaignConfig,
-    config: dict[str, Any],
+    config: RunnerConfig,
     deploy_result: DeployResult | None = None,
 ) -> None:
     """Execute the test phase and update request to completed/failed.
@@ -227,7 +226,7 @@ class PhaseRunner(ABC):
 
     def __init__(
         self,
-        config: dict[str, Any],
+        config: RunnerConfig,
         campaign: CampaignConfig,
         requests_dir: Path,
     ) -> None:

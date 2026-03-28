@@ -17,6 +17,7 @@ from autoforge.plugins.protocols import (
     Deployer,
     Judge,
     Profiler,
+    RunnerConfig,
     Tester,
 )
 
@@ -150,7 +151,7 @@ def load_component(
     root: Path | None = None,
     *,
     project_config: dict[str, Any] | None = None,
-    runner_config: dict[str, Any] | None = None,
+    runner_config: RunnerConfig | None = None,
 ) -> ComponentType:
     """Load a single plugin component by project/category/name.
 
@@ -231,7 +232,7 @@ def load_judge(
     root: Path | None = None,
     *,
     project_config: dict[str, Any] | None = None,
-    runner_config: dict[str, Any] | None = None,
+    runner_config: RunnerConfig | None = None,
 ) -> Judge:
     """Load a judge plugin by project and name.
 

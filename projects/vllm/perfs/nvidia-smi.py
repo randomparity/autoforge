@@ -7,7 +7,7 @@ import subprocess
 import time
 from typing import TYPE_CHECKING, Any
 
-from autoforge.plugins.protocols import ProfileResult
+from autoforge.plugins.protocols import ProfileResult, RunnerConfig
 
 if TYPE_CHECKING:
     from autoforge.campaign import ProjectConfig
@@ -20,7 +20,7 @@ class NvidiaSmiProfiler:
 
     name = "nvidia-smi"
 
-    def configure(self, project_config: ProjectConfig, runner_config: dict[str, Any]) -> None:
+    def configure(self, project_config: ProjectConfig, runner_config: RunnerConfig) -> None:
         cfg = runner_config.get("profiling", {})
         self._interval_ms = int(cfg.get("interval_ms", 500))
 
