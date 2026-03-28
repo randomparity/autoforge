@@ -19,6 +19,8 @@ class MetricConfig(TypedDict, total=False):
     path: str
     direction: Literal["maximize", "minimize"]
     threshold: float
+    comparison: str
+    comparison_window: int
 
 
 class AgentConfig(TypedDict, total=False):
@@ -102,6 +104,16 @@ def metric_name(cfg: CampaignConfig) -> str:
 def metric_threshold(cfg: CampaignConfig) -> float:
     """Return the metric threshold from campaign config."""
     return cfg.get("metric", {}).get("threshold", 0.0)
+
+
+def metric_comparison(cfg: CampaignConfig) -> str:
+    """Return the metric comparison mode (``"peak"`` or ``"rolling_average"``)."""
+    return cfg.get("metric", {}).get("comparison", "peak")
+
+
+def metric_comparison_window(cfg: CampaignConfig) -> int:
+    """Return the rolling average window size."""
+    return cfg.get("metric", {}).get("comparison_window", 5)
 
 
 def metric_config(cfg: CampaignConfig) -> MetricConfig:

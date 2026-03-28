@@ -20,6 +20,8 @@ from autoforge.campaign import (
     campaign_meta,
     campaign_name,
     goal_description,
+    metric_comparison,
+    metric_comparison_window,
     metric_direction,
     metric_name,
     project_config,
@@ -54,8 +56,14 @@ def format_context(
         f"Objective: {metric_direction(campaign)} {metric_name(campaign)}",
         f"Project scope: {', '.join(proj_cfg.get('scope', []))}",
         f"Iterations: {len(history)} / {camp_meta.get('max_iterations', '?')}",
-        "",
     ]
+
+    cmp_mode = metric_comparison(campaign)
+    if cmp_mode != "peak":
+        window = metric_comparison_window(campaign)
+        lines.append(f"Comparison: {cmp_mode} (window={window})")
+
+    lines.append("")
 
     if goal:
         lines.append(f"Goal: {goal}")
@@ -251,6 +259,9 @@ def _classify_error(error_msg: str, log: str) -> str:
 def has_submodule_change(source_path: Path) -> bool:
     """Check whether the source submodule pointer differs from the outer repo.
 
+    Checks both unstaged and staged (cached) changes so that a submodule
+    pointer already added via ``git add`` is still detected.
+
     Args:
         source_path: Path to the source submodule directory.
 
@@ -259,22 +270,65 @@ def has_submodule_change(source_path: Path) -> bool:
         submodule has a different commit than what is currently tracked).
 
     Raises:
-        subprocess.CalledProcessError: If the git diff command fails.
+        subprocess.CalledProcessError: If a git diff command fails.
     """
-    outer_diff = subprocess.run(
-        ["git", "diff", "--submodule=short", "--", str(source_path)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if outer_diff.returncode != 0:
-        raise subprocess.CalledProcessError(
-            outer_diff.returncode,
-            outer_diff.args,
-            outer_diff.stdout,
-            outer_diff.stderr,
+    for extra_args in ([], ["--cached"]):
+        cmd = ["git", "diff", *extra_args, "--submodule=short", "--", str(source_path)]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            raise subprocess.CalledProcessError(
+                result.returncode, result.args, result.stdout, result.stderr
+            )
+        if result.stdout.strip():
+            return True
+
+    logger.warning("No submodule pointer change detected in %s", source_path)
+    return False
+
+
+def check_scope_compliance(source_path: Path, scope: list[str]) -> list[str]:
+    """Return submodule-relative paths that fall outside the configured scope.
+
+    Args:
+        source_path: Path to the source submodule directory.
+        scope: List of allowed path prefixes (e.g. ``["drivers/net/memif/"]``).
+
+    Returns:
+        List of changed file paths not matching any scope prefix. Empty list
+        means all changes are in scope (or scope is empty / no files changed).
+    """
+    if not scope:
+        return []
+
+    normalized = [s.rstrip("/") + "/" for s in scope]
+
+    out_of_scope: list[str] = []
+    for extra_args in ([], ["--cached"]):
+        cmd = [
+            "git",
+            "diff",
+            *extra_args,
+            "--name-only",
+            "HEAD",
+        ]
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=str(source_path),
         )
-    has_change = bool(outer_diff.stdout.strip())
-    if not has_change:
-        logger.warning("No submodule pointer change detected in %s", source_path)
-    return has_change
+        if result.returncode != 0:
+            logger.warning("scope check git diff failed: %s", result.stderr.strip())
+            return []
+        for line in result.stdout.strip().splitlines():
+            path = line.strip()
+            if not path:
+                continue
+            if (
+                not any(path.startswith(prefix) for prefix in normalized)
+                and path not in out_of_scope
+            ):
+                out_of_scope.append(path)
+
+    return out_of_scope

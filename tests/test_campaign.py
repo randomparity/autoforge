@@ -7,7 +7,12 @@ from unittest.mock import patch
 
 import pytest
 
-from autoforge.campaign import load_campaign, resolve_campaign_path
+from autoforge.campaign import (
+    load_campaign,
+    metric_comparison,
+    metric_comparison_window,
+    resolve_campaign_path,
+)
 from autoforge.pointer import load_pointer, save_pointer
 
 
@@ -112,6 +117,25 @@ class TestResolveCampaignPath:
 
         result = resolve_campaign_path(explicit)
         assert result == explicit
+
+
+class TestMetricComparison:
+    def test_defaults_to_peak(self) -> None:
+        cfg = {"metric": {"name": "throughput", "direction": "maximize"}}
+        assert metric_comparison(cfg) == "peak"
+
+    def test_defaults_window_to_5(self) -> None:
+        cfg = {"metric": {"name": "throughput"}}
+        assert metric_comparison_window(cfg) == 5
+
+    def test_custom_values(self) -> None:
+        cfg = {"metric": {"comparison": "rolling_average", "comparison_window": 10}}
+        assert metric_comparison(cfg) == "rolling_average"
+        assert metric_comparison_window(cfg) == 10
+
+    def test_empty_config(self) -> None:
+        assert metric_comparison({}) == "peak"
+        assert metric_comparison_window({}) == 5
 
 
 class TestLoadCampaign:

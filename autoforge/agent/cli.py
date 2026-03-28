@@ -24,6 +24,7 @@ from autoforge.agent.history import (
     format_failures,
     load_failures,
     load_history,
+    rolling_average_result,
 )
 from autoforge.agent.judge import apply_judge_verdict
 from autoforge.agent.project import init_project, list_projects, switch_project
@@ -44,6 +45,7 @@ from autoforge.agent.sprint import (
     switch_sprint,
 )
 from autoforge.agent.strategy import (
+    check_scope_compliance,
     extract_profile_summary,
     format_context,
     format_failure_patterns,
@@ -55,9 +57,12 @@ from autoforge.campaign import (
     agent_poll_interval,
     agent_timeout,
     load_campaign,
+    metric_comparison,
+    metric_comparison_window,
     metric_direction,
     optimization_branch,
     platform_arch,
+    project_config,
     project_name,
     resolve_campaign_path,
     submodule_path,
@@ -112,6 +117,15 @@ def cmd_submit(
     if not has_submodule_change(source_path):
         print("ERROR: No submodule change detected. Commit in the submodule first.")
         sys.exit(1)
+
+    scope = project_config(campaign).get("scope", [])
+    out_of_scope = check_scope_compliance(source_path, scope)
+    if out_of_scope:
+        print(f"WARNING: {len(out_of_scope)} file(s) outside configured scope:")
+        for p in out_of_scope[:10]:
+            print(f"  - {p}")
+        if len(out_of_scope) > 10:
+            print(f"  ... and {len(out_of_scope) - 10} more")
 
     commit = git_submodule_head(source_path)
     branch = optimization_branch(campaign)
@@ -267,8 +281,14 @@ def cmd_judge(campaign: CampaignConfig, dry_run: bool) -> None:
     description = latest.description or ""
     req_tags = getattr(latest, "tags", None)
 
-    current_best = best_result(res, direction=direction)
-    best_val = float(current_best["metric_value"]) if current_best else None
+    cmp_mode = metric_comparison(campaign)
+    if cmp_mode == "rolling_average":
+        window = metric_comparison_window(campaign)
+        avg = rolling_average_result(res, direction=direction, window=window)
+        best_val = avg
+    else:
+        current_best = best_result(res, direction=direction)
+        best_val = float(current_best["metric_value"]) if current_best else None
 
     append_result(
         latest.sequence,

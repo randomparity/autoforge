@@ -131,12 +131,15 @@ class TestVllmContainerBuilder:
 
     @patch("subprocess.run")
     def test_source_build_failure(self, mock_run: MagicMock, tmp_path: Path) -> None:
-        # First call (git checkout) succeeds, second (git describe) fails,
-        # third (git rev-parse) succeeds, fourth (docker build) fails
+        # 1: git checkout succeeds, 2: git describe fails, 3: git rev-parse succeeds,
+        # 4: git fetch origin main (precompiled base), 5: git merge-base succeeds,
+        # 6: docker build fails
         mock_run.side_effect = [
             _make_completed(0),
             _make_completed(128, stderr="no tag"),
             _make_completed(0, stdout="bcf2be96"),
+            _make_completed(0),
+            _make_completed(0, stdout="abc123base"),
             _make_completed(1, stderr="build error"),
         ]
         _write_test_dockerfile(tmp_path)
