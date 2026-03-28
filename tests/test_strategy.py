@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-from autoforge.agent.strategy import format_context
+import subprocess
+from unittest.mock import patch
+
+from autoforge.agent.strategy import (
+    check_scope_compliance,
+    format_context,
+    has_submodule_change,
+)
 
 
 def _row(seq: str, metric: str, status: str, desc: str) -> dict:
@@ -98,3 +105,112 @@ class TestFormatContext:
         campaign = {**SAMPLE_CAMPAIGN, "platform": {"arch": "ppc64le"}}
         result = format_context([], campaign)
         assert "Workload-specific suggestions" not in result
+
+    def test_shows_comparison_mode_when_non_default(self) -> None:
+        campaign = {
+            **SAMPLE_CAMPAIGN,
+            "metric": {
+                **SAMPLE_CAMPAIGN["metric"],
+                "comparison": "rolling_average",
+                "comparison_window": 10,
+            },
+        }
+        result = format_context([], campaign)
+        assert "Comparison: rolling_average (window=10)" in result
+
+    def test_hides_comparison_mode_when_peak(self) -> None:
+        result = format_context([], SAMPLE_CAMPAIGN)
+        assert "Comparison:" not in result
+
+
+def _fake_run(stdout: str, returncode: int = 0):
+    """Build a fake subprocess.CompletedProcess."""
+    return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr="")
+
+
+class TestHasSubmoduleChange:
+    def test_unstaged_only(self, tmp_path) -> None:
+        """Unstaged diff has output, cached is empty → True."""
+        with patch("autoforge.agent.strategy.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                _fake_run("Submodule projects/dpdk/repo abc..def"),
+                # --cached call not needed since first returned True
+            ]
+            assert has_submodule_change(tmp_path / "repo") is True
+            assert mock_run.call_count == 1
+
+    def test_staged_only(self, tmp_path) -> None:
+        """Unstaged is empty, cached has output → True."""
+        with patch("autoforge.agent.strategy.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                _fake_run(""),  # unstaged: nothing
+                _fake_run("Submodule projects/dpdk/repo abc..def"),  # cached: changed
+            ]
+            assert has_submodule_change(tmp_path / "repo") is True
+            assert mock_run.call_count == 2
+
+    def test_both_changed(self, tmp_path) -> None:
+        """Both unstaged and cached have output → True (short-circuits on first)."""
+        with patch("autoforge.agent.strategy.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                _fake_run("Submodule diff"),
+            ]
+            assert has_submodule_change(tmp_path / "repo") is True
+            assert mock_run.call_count == 1
+
+    def test_neither_changed(self, tmp_path) -> None:
+        """Neither has output → False."""
+        with patch("autoforge.agent.strategy.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                _fake_run(""),
+                _fake_run(""),
+            ]
+            assert has_submodule_change(tmp_path / "repo") is False
+
+    def test_git_failure_raises(self, tmp_path) -> None:
+        """Non-zero return code raises CalledProcessError."""
+        import pytest
+
+        with patch("autoforge.agent.strategy.subprocess.run") as mock_run:
+            mock_run.return_value = _fake_run("", returncode=128)
+            with pytest.raises(subprocess.CalledProcessError):
+                has_submodule_change(tmp_path / "repo")
+
+
+class TestCheckScopeCompliance:
+    def test_empty_scope_returns_empty(self, tmp_path) -> None:
+        assert check_scope_compliance(tmp_path, []) == []
+
+    def test_all_in_scope(self, tmp_path) -> None:
+        with patch("autoforge.agent.strategy.subprocess.run") as mock_run:
+            mock_run.return_value = _fake_run(
+                "drivers/net/memif/rte_eth_memif.c\ndrivers/net/memif/memif.h\n"
+            )
+            result = check_scope_compliance(tmp_path, ["drivers/net/memif/"])
+            assert result == []
+
+    def test_some_out_of_scope(self, tmp_path) -> None:
+        with patch("autoforge.agent.strategy.subprocess.run") as mock_run:
+            mock_run.return_value = _fake_run(
+                "drivers/net/memif/rte_eth_memif.c\nlib/ethdev/rte_ethdev.c\n"
+            )
+            result = check_scope_compliance(tmp_path, ["drivers/net/memif/"])
+            assert result == ["lib/ethdev/rte_ethdev.c"]
+
+    def test_no_changed_files(self, tmp_path) -> None:
+        with patch("autoforge.agent.strategy.subprocess.run") as mock_run:
+            mock_run.return_value = _fake_run("")
+            result = check_scope_compliance(tmp_path, ["drivers/net/memif/"])
+            assert result == []
+
+    def test_scope_without_trailing_slash(self, tmp_path) -> None:
+        with patch("autoforge.agent.strategy.subprocess.run") as mock_run:
+            mock_run.return_value = _fake_run("drivers/net/memif/rte_eth_memif.c\n")
+            result = check_scope_compliance(tmp_path, ["drivers/net/memif"])
+            assert result == []
+
+    def test_git_failure_returns_empty(self, tmp_path) -> None:
+        with patch("autoforge.agent.strategy.subprocess.run") as mock_run:
+            mock_run.return_value = _fake_run("", returncode=1)
+            result = check_scope_compliance(tmp_path, ["drivers/net/memif/"])
+            assert result == []

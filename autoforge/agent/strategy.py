@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+from collections import Counter
 from typing import TYPE_CHECKING, Any
 
 from autoforge.agent.hints import workload_hints
@@ -19,6 +20,8 @@ from autoforge.campaign import (
     campaign_meta,
     campaign_name,
     goal_description,
+    metric_comparison,
+    metric_comparison_window,
     metric_direction,
     metric_name,
     project_config,
@@ -53,8 +56,14 @@ def format_context(
         f"Objective: {metric_direction(campaign)} {metric_name(campaign)}",
         f"Project scope: {', '.join(proj_cfg.get('scope', []))}",
         f"Iterations: {len(history)} / {camp_meta.get('max_iterations', '?')}",
-        "",
     ]
+
+    cmp_mode = metric_comparison(campaign)
+    if cmp_mode != "peak":
+        window = metric_comparison_window(campaign)
+        lines.append(f"Comparison: {cmp_mode} (window={window})")
+
+    lines.append("")
 
     if goal:
         lines.append(f"Goal: {goal}")
@@ -158,8 +167,100 @@ def extract_profile_summary(result: TestRequest) -> dict[str, Any] | None:
     return raw.get("profiling")
 
 
+def format_failure_patterns(requests_dir: Path, limit: int = 20) -> str:
+    """Scan recent failed requests and summarize failure patterns.
+
+    Args:
+        requests_dir: Directory containing request JSON files.
+        limit: Maximum number of recent requests to scan.
+
+    Returns:
+        A summary string, or empty string if no failures found.
+    """
+    from autoforge.protocol import TestRequest
+
+    if not requests_dir.is_dir():
+        return ""
+
+    json_files = sorted(requests_dir.glob("*.json"), reverse=True)[:limit]
+    phase_counts: Counter[str] = Counter()
+    error_patterns: dict[str, Counter[str]] = {}
+
+    for path in json_files:
+        try:
+            request = TestRequest.read(path)
+        except (ValueError, KeyError, TypeError, OSError):
+            continue
+
+        if request.status != "failed":
+            continue
+
+        phase = request.failed_phase or "unknown"
+        phase_counts[phase] += 1
+
+        if phase not in error_patterns:
+            error_patterns[phase] = Counter()
+
+        error_msg = request.error or ""
+        log = _pick_log_for_phase(request, phase)
+        pattern = _classify_error(error_msg, log)
+        if pattern:
+            error_patterns[phase][pattern] += 1
+
+    if not phase_counts:
+        return ""
+
+    parts: list[str] = []
+    for phase, count in phase_counts.most_common():
+        detail_parts: list[str] = []
+        for pattern, pcount in error_patterns.get(phase, Counter()).most_common(3):
+            detail_parts.append(f"{pcount} {pattern}")
+        detail = f" ({', '.join(detail_parts)})" if detail_parts else ""
+        parts.append(f"{count} {phase}{detail}")
+
+    return f"Recent failures: {', '.join(parts)}"
+
+
+def _pick_log_for_phase(request: TestRequest, phase: str) -> str:
+    """Return the log snippet matching the phase."""
+    if phase == "build":
+        return request.build_log_snippet or ""
+    if phase == "deploy":
+        return getattr(request, "deploy_log_snippet", "") or ""
+    if phase == "test":
+        return getattr(request, "test_log_snippet", "") or ""
+    return ""
+
+
+def _classify_error(error_msg: str, log: str) -> str:
+    """Classify an error into a short pattern label."""
+    combined = f"{error_msg}\n{log}".lower()
+    if "timeout" in combined:
+        return "timeout"
+    if "linker" in combined or "undefined reference" in combined or "ld returned" in combined:
+        return "linker"
+    if "assertion" in combined or "assert" in combined:
+        return "assertion"
+    if "oom" in combined or "out of memory" in combined or "cannot allocate" in combined:
+        return "oom"
+    if "permission" in combined or "denied" in combined:
+        return "permission"
+    if "syntax error" in combined or "parse error" in combined:
+        return "syntax"
+    if "not found" in combined or "no such file" in combined:
+        return "missing-file"
+    if error_msg:
+        # Use first few words of error as fallback label
+        words = error_msg.split()[:4]
+        return " ".join(words).rstrip(":")
+    return "unknown"
+
+
 def has_submodule_change(source_path: Path) -> bool:
     """Check whether the source submodule pointer differs from the outer repo.
+
+    Checks both unstaged and staged (cached) changes so that a submodule
+    pointer already added via ``git add`` is still detected.
 
     Args:
         source_path: Path to the source submodule directory.
@@ -169,22 +270,56 @@ def has_submodule_change(source_path: Path) -> bool:
         submodule has a different commit than what is currently tracked).
 
     Raises:
-        subprocess.CalledProcessError: If the git diff command fails.
+        subprocess.CalledProcessError: If a git diff command fails.
     """
-    outer_diff = subprocess.run(
-        ["git", "diff", "--submodule=short", "--", str(source_path)],
+    for extra_args in ([], ["--cached"]):
+        cmd = ["git", "diff", *extra_args, "--submodule=short", "--", str(source_path)]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            raise subprocess.CalledProcessError(
+                result.returncode, result.args, result.stdout, result.stderr
+            )
+        if result.stdout.strip():
+            return True
+
+    logger.warning("No submodule pointer change detected in %s", source_path)
+    return False
+
+
+def check_scope_compliance(source_path: Path, scope: list[str]) -> list[str]:
+    """Return submodule-relative paths that fall outside the configured scope.
+
+    Args:
+        source_path: Path to the source submodule directory.
+        scope: List of allowed path prefixes (e.g. ``["drivers/net/memif/"]``).
+
+    Returns:
+        List of changed file paths not matching any scope prefix. Empty list
+        means all changes are in scope (or scope is empty / no files changed).
+    """
+    if not scope:
+        return []
+
+    normalized = [s.rstrip("/") + "/" for s in scope]
+
+    # git diff HEAD covers both staged and unstaged changes vs HEAD
+    result = subprocess.run(
+        ["git", "diff", "--name-only", "HEAD"],
         capture_output=True,
         text=True,
         timeout=30,
+        cwd=str(source_path),
     )
-    if outer_diff.returncode != 0:
-        raise subprocess.CalledProcessError(
-            outer_diff.returncode,
-            outer_diff.args,
-            outer_diff.stdout,
-            outer_diff.stderr,
-        )
-    has_change = bool(outer_diff.stdout.strip())
-    if not has_change:
-        logger.warning("No submodule pointer change detected in %s", source_path)
-    return has_change
+    if result.returncode != 0:
+        logger.warning("scope check git diff failed: %s", result.stderr.strip())
+        return []
+
+    out_of_scope: list[str] = []
+    for line in result.stdout.strip().splitlines():
+        path = line.strip()
+        if not path:
+            continue
+        if not any(path.startswith(prefix) for prefix in normalized):
+            out_of_scope.append(path)
+
+    return out_of_scope

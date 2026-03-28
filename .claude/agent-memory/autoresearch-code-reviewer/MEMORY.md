@@ -195,6 +195,30 @@
   replaces `optimization_branch` anywhere in the file, not just under `[project]`.
   In practice the key only appears once under `[project]` in all templates.
 
+### feat/add-first-vllm-tests patterns (reviewed 2026-03-27)
+- `deploy/container-gpu.toml` uses `${HOME}` for `hf_cache`. HOME is not set in
+  all runner environments (systemd units, containers). Use `${HOME:-/root}` or fall
+  back to `Path.home()` in configure(). This bug caused both baseline requests to fail.
+- `cmd_baseline()` in cli.py has hardcoded `description = "Baseline: unmodified DPDK"`.
+  Wrong for non-DPDK projects (vLLM sprint shows "Baseline: unmodified DPDK" in request).
+  Fix: use `project_name(campaign)` for dynamic description.
+- `_check_config_sections()` in doctor.py accepts `data` as first param but ignores it —
+  dead parameter, reloads files internally. Harmless but confusing.
+- `_check_sensitive_empty()` only checks base `.toml` data, not the merged `.local.toml`.
+  Secrets with empty values in local override are not caught.
+- `test_regex_fallback` in test_vllm_plugins.py: `tmp_path` fixture arg is unused.
+  `result_dir` and `bench_cmd` keys passed in runner_config are never read by configure().
+- Sprint request files committed to git (2 failed requests in vLLM baseline sprint).
+  CLAUDE.md says "Never commit test or scratch request files". Production failed requests
+  should stay in git (they're the results history), but the sprint is not ready to merge.
+- `load_config` in service.py: `if not result` raises FileNotFoundError even if
+  runner.toml exists but is empty. Error message says "Create a runner.local.toml"
+  which is misleading. Minor quality issue.
+- `local.toml` plugin name for DPDK builder: sibling override file would be
+  `local.local.toml` (from `with_suffix(".local.toml")`). Comment in the file says so.
+  Confusing but documented. Pattern to watch in future plugins.
+- `autoforge-runner` entry point added to pyproject.toml (new in this branch).
+
 ## Project Conventions
 - Import rule: always via `autoforge.protocol` facade, not `autoforge.protocol.schema`.
 - runner/ and agent/ must not import from each other.
@@ -202,10 +226,13 @@
 - `from __future__ import annotations` in every file.
 - Sprint layout: `projects/<project>/sprints/<name>/{requests/, docs/, campaign.toml, results.tsv}`
 - Active sprint in `.autoforge.toml` at repo root.
-- Plugin file stem = plugin name (e.g. `local.py` → `"local"`). Renamed from `local-server` in fix/runner-setup.
+- Plugin file stem = plugin name. Plugin sibling config: `<stem>.toml` (shared, git-tracked); `<stem>.local.toml` (gitignored, system-specific).
 - `DEFAULT_REQUESTS_DIR` removed. All callers pass explicit Path arguments.
-- `perf/results/` is gitignored.
-- Runner config path resolution (fix/runner-setup): explicit arg > `AUTOFORGE_CONFIG` env > `.autoforge.toml` pointer → `projects/<project>/runner.toml`.
+- `perf/results/` is gitignored. `.local.toml` files are gitignored.
+- Runner config path resolution: explicit arg > `AUTOFORGE_CONFIG` env > `.autoforge.toml` pointer → `projects/<project>/runner.toml`.
+- Config system (feat/add-first-vllm-tests): `autoforge/config.py` handles `${VAR}`, `${VAR:-default}`, `${REPO_ROOT}`, deep_merge, load_toml_with_local.
+- `campaign.py`: `load_campaign` now calls `resolve_vars()` after TOML parse (vars in campaign.toml are resolved).
+- Merge order in plugins/loader.py: `deep_merge(runner_config, plugin_cfg)` — plugin cfg wins over runner config (by design).
 
 Notes:
 - Always use absolute file paths.

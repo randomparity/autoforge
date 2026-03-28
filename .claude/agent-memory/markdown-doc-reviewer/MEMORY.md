@@ -111,6 +111,26 @@ All registered: context, status, poll, judge, baseline, finale, revert, build-lo
 - autoforge/perf/profile.py: ProfileResult → PerfCaptureResult (plugin ProfileResult in protocols.py is unchanged)
 - autoforge/perf/analyze.py: ProfileSummary TypedDict added; summarize() return type tightened
 
+## Doc inventory update (as of 2026-03-27, branch feat/add-first-vllm-tests)
+- projects/dpdk/README.md — NEW: DPDK project-specific setup, plugin tables, sudo config, see-also links
+- projects/vllm/README.md — NEW: vLLM project setup, GPU prereqs, container plugin tables, optimization strategies
+- All runner.toml.example refs replaced by shared runner.toml + .local.toml overrides (new config model)
+- autoforge-runner entry point now registered (was python -m autoforge.runner.service)
+- project list and project switch CLI commands added (feat: add autoforge project list and project switch)
+
+## Confirmed facts (feat/add-first-vllm-tests)
+- threshold is an absolute delta value, NOT a percentage (abs(metric - best_val) < threshold)
+  - DPDK threshold 0.01 = 0.01 Mpps minimum improvement; vLLM threshold 2.0 = 2.0 tok/s minimum
+  - Both project READMEs document this incorrectly as a percentage ("1%", "2%") — high-severity inaccuracy
+- vLLM bench-serving plugin reads from [bench] config section (not [test])
+- hf_cache default in code: Path.home() / ".cache/huggingface" (dynamic); toml default: ${HOME}/.cache/huggingface
+  - vLLM README documents hf_cache default as "/home/user/.cache/huggingface" — imprecise but acceptable
+- projects/dpdk/README.md line 73: stale invocation "uv run python -m autoforge.runner.service" — should be "uv run autoforge-runner"
+- project list and project switch commands exist in cli.py but NOT in agent.md CLI table or CLAUDE.md commands
+- docs/runner.md header still says DPDK-specific ("lab machine with DPDK hardware") — no mention of vLLM
+- docs/agent.md still has DPDK-specific prerequisite ("DPDK submodule initialized") and DPDK language in descriptions
+- plugin-sdk.md: "local.local.toml" comment in quick-start example is technically correct (stem of local.py is local)
+
 ## Style conventions observed
 - Heading style: Title Case for top-level (#), sentence case acceptable for lower levels
 - Tables: pipe-delimited, consistent column alignment

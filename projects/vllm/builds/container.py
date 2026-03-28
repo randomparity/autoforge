@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 import subprocess
 import time
@@ -38,6 +39,7 @@ class VllmContainerBuilder:
         self._mode = cfg.get("mode", "prebuilt")
         self._base_image = cfg.get("base_image", "docker.io/vllm/vllm-openai:latest")
         self._local_tag = cfg.get("local_tag", "localhost/vllm-bench:latest")
+        self._dockerfile = cfg.get("dockerfile", "Dockerfile")
         self._runtime = _resolve_runtime(cfg.get("runtime", "auto"))
 
     def build(
@@ -88,6 +90,121 @@ class VllmContainerBuilder:
                 duration_seconds=time.monotonic() - start,
             )
 
+    @staticmethod
+    def _get_scm_version(source_path: Path) -> str:
+        """Get version string from git describe for setuptools_scm override."""
+        result = subprocess.run(
+            ["git", "describe", "--tags"],
+            cwd=source_path,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip().lstrip("v")
+        # No reachable tag — fall back to a valid PEP 440 version with
+        # the short commit hash so the build doesn't fail.
+        rev = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=source_path,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        short_hash = rev.stdout.strip() if rev.returncode == 0 else "unknown"
+        return f"0.0.0.dev0+g{short_hash}"
+
+    def _patch_dockerfile_for_submodule(self, source_path: Path, version: str) -> None:
+        """Patch Dockerfile to eliminate all .git access during build.
+
+        In submodules, .git is a pointer file, not a directory. Docker
+        bind mounts expose this file as-is, breaking setuptools_scm and
+        vcs_versioning. Fix by:
+        1. Removing all .git bind mounts from RUN instructions
+        2. Overriding SETUPTOOLS_SCM_PRETEND_VERSION in every stage
+        3. Adding .git to .dockerignore to exclude from build context
+        """
+        dockerfile = source_path / self._dockerfile
+        content = dockerfile.read_text()
+
+        # Remove .git bind mounts (they can't resolve submodule pointers).
+        # Case 1: .git mount as a continuation line (e.g. after --mount=type=cache).
+        content = re.sub(
+            r"\n\s*--mount=type=bind,source=\.git,target=\.git\s*\\",
+            "",
+            content,
+        )
+        # Case 2: RUN whose only purpose is a .git mount (GIT_REPO_CHECK).
+        content = re.sub(
+            r"RUN --mount=type=bind,source=\.git,target=\.git\s*\\\n"
+            r"\s*if \[ .+?; fi\n",
+            "",
+            content,
+        )
+
+        # Override the csrc-build stage's pretend version (may be ignored
+        # by newer vcs_versioning) with VLLM_VERSION_OVERRIDE which
+        # setup.py checks before calling setuptools_scm.
+        content = content.replace(
+            'ENV SETUPTOOLS_SCM_PRETEND_VERSION="0.0.0+csrc.build"',
+            'ENV SETUPTOOLS_SCM_PRETEND_VERSION="0.0.0+csrc.build"\n'
+            'ENV VLLM_VERSION_OVERRIDE="0.0.0+csrc.build"',
+        )
+
+        # Inject version into the build stage
+        content = content.replace(
+            "ENV VLLM_SKIP_PRECOMPILED_VERSION_SUFFIX=1",
+            "ENV VLLM_SKIP_PRECOMPILED_VERSION_SUFFIX=1\n"
+            f'ENV SETUPTOOLS_SCM_PRETEND_VERSION="{version}"\n'
+            f'ENV VLLM_VERSION_OVERRIDE="{version}"',
+        )
+
+        dockerfile.write_text(content)
+
+        # Exclude .git from build context entirely
+        dockerignore = source_path / ".dockerignore"
+        ignore_text = dockerignore.read_text() if dockerignore.exists() else ""
+        if ".git" not in ignore_text.splitlines():
+            dockerignore.write_text(ignore_text.rstrip() + "\n.git\n")
+
+        logger.info("Patched Dockerfile: removed .git mounts, set version=%s", version)
+
+    @staticmethod
+    def _get_precompiled_base_commit(source_path: Path, commit: str) -> str:
+        """Find the upstream merge-base commit for precompiled wheel download.
+
+        When building from a local optimization branch, the commit is a custom
+        hash with no published precompiled wheels. Use the merge-base with the
+        upstream main branch so the Dockerfile downloads wheels from a commit
+        that actually has them published.
+        """
+        # Ensure we have up-to-date remote refs.
+        subprocess.run(
+            ["git", "fetch", "origin", "main"],
+            cwd=source_path,
+            capture_output=True,
+            timeout=60,
+        )
+        for upstream_ref in ("origin/main", "upstream/main", "main"):
+            result = subprocess.run(
+                ["git", "merge-base", upstream_ref, commit],
+                cwd=source_path,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if result.returncode == 0:
+                base = result.stdout.strip()
+                if base != commit:
+                    logger.info(
+                        "Using upstream merge-base %s for precompiled wheels (commit: %s, ref: %s)",
+                        base[:12],
+                        commit[:12],
+                        upstream_ref,
+                    )
+                    return base
+        return commit
+
     def _build_from_source(
         self,
         source_path: Path,
@@ -97,12 +214,20 @@ class VllmContainerBuilder:
     ) -> BuildResult:
         try:
             subprocess.run(
-                ["git", "checkout", commit],
+                ["git", "checkout", "--force", commit],
                 cwd=source_path,
                 check=True,
                 capture_output=True,
                 timeout=30,
             )
+            # Patch Dockerfile to eliminate .git access (broken in submodules)
+            version = self._get_scm_version(source_path)
+            self._patch_dockerfile_for_submodule(source_path, version)
+
+            # Use upstream merge-base for precompiled wheels when building
+            # from an optimization branch.
+            precompiled_commit = self._get_precompiled_base_commit(source_path, commit)
+
             cmd = [self._runtime, "build"]
             if self._runtime == "podman":
                 cmd.extend(["--security-opt", "label=disable"])
@@ -110,10 +235,12 @@ class VllmContainerBuilder:
                 [
                     "--build-arg",
                     "VLLM_USE_PRECOMPILED=1",
+                    "--build-arg",
+                    f"VLLM_MERGE_BASE_COMMIT={precompiled_commit}",
                     "-t",
                     self._local_tag,
                     "-f",
-                    str(source_path / "Dockerfile"),
+                    str(source_path / self._dockerfile),
                     str(source_path),
                 ]
             )

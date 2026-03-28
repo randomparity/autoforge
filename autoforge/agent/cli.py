@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from autoforge.agent.git_ops import (
@@ -22,6 +24,7 @@ from autoforge.agent.history import (
     format_failures,
     load_failures,
     load_history,
+    rolling_average_result,
 )
 from autoforge.agent.judge import apply_judge_verdict
 from autoforge.agent.project import init_project, list_projects, switch_project
@@ -42,8 +45,10 @@ from autoforge.agent.sprint import (
     switch_sprint,
 )
 from autoforge.agent.strategy import (
+    check_scope_compliance,
     extract_profile_summary,
     format_context,
+    format_failure_patterns,
     format_profile_lines,
     has_submodule_change,
 )
@@ -52,9 +57,12 @@ from autoforge.campaign import (
     agent_poll_interval,
     agent_timeout,
     load_campaign,
+    metric_comparison,
+    metric_comparison_window,
     metric_direction,
     optimization_branch,
     platform_arch,
+    project_config,
     project_name,
     resolve_campaign_path,
     submodule_path,
@@ -88,6 +96,11 @@ def cmd_context(campaign: CampaignConfig) -> None:
         print()
         print(fail_text)
 
+    failure_patterns = format_failure_patterns(req)
+    if failure_patterns:
+        print()
+        print(failure_patterns)
+
 
 def cmd_submit(
     campaign: CampaignConfig,
@@ -104,6 +117,15 @@ def cmd_submit(
     if not has_submodule_change(source_path):
         print("ERROR: No submodule change detected. Commit in the submodule first.")
         sys.exit(1)
+
+    scope = project_config(campaign).get("scope", [])
+    out_of_scope = check_scope_compliance(source_path, scope)
+    if out_of_scope:
+        print(f"WARNING: {len(out_of_scope)} file(s) outside configured scope:")
+        for p in out_of_scope[:10]:
+            print(f"  - {p}")
+        if len(out_of_scope) > 10:
+            print(f"  ... and {len(out_of_scope) - 10} more")
 
     commit = git_submodule_head(source_path)
     branch = optimization_branch(campaign)
@@ -150,6 +172,55 @@ def cmd_poll(campaign: CampaignConfig) -> None:
     _print_result(result)
 
 
+def _format_timeline(request: TestRequest) -> str:
+    """Build a compact phase timeline string with durations."""
+    phases: list[tuple[str, str | None]] = [
+        ("created", request.created_at),
+        ("claimed", request.claimed_at),
+        ("built", request.built_at),
+        ("deployed", request.deployed_at),
+        ("completed", request.completed_at),
+    ]
+    parts: list[str] = []
+    prev_dt: datetime | None = None
+    for label, ts in phases:
+        if ts is None:
+            continue
+        try:
+            dt = datetime.fromisoformat(ts)
+        except ValueError:
+            parts.append(f"{label} {ts}")
+            prev_dt = None
+            continue
+        time_str = dt.strftime("%H:%M:%S")
+        if prev_dt is not None:
+            delta = dt - prev_dt
+            secs = int(delta.total_seconds())
+            dur = f"{secs // 60}m{secs % 60}s" if secs >= 60 else f"{secs}s"
+            parts.append(f"{label} {time_str} (+{dur})")
+        else:
+            parts.append(f"{label} {time_str}")
+        prev_dt = dt
+
+    if request.status == "failed" and request.failed_phase:
+        parts[-1] = f"FAILED at {request.failed_phase} {parts[-1].split(' ', 1)[1]}"
+
+    return " -> ".join(parts)
+
+
+def _failure_log(request: TestRequest) -> str | None:
+    """Return the appropriate log snippet based on failed_phase."""
+    phase = request.failed_phase
+    if phase == "build":
+        return request.build_log_snippet
+    if phase == "deploy":
+        return request.deploy_log_snippet
+    if phase == "test":
+        return request.test_log_snippet
+    # Fallback: return whichever is available
+    return request.build_log_snippet or request.deploy_log_snippet or request.test_log_snippet
+
+
 def _print_result(result: TestRequest) -> None:
     """Print a completed/failed request result."""
     seq = result.sequence
@@ -158,9 +229,27 @@ def _print_result(result: TestRequest) -> None:
     error = result.error
 
     if status == "failed":
-        print(f"Request {seq:04d} FAILED: {error}")
+        phase_info = f" at {result.failed_phase}" if result.failed_phase else ""
+        print(f"Request {seq:04d} FAILED{phase_info}: {error}")
     else:
         print(f"Request {seq:04d} {status}. Metric: {metric}")
+
+    timeline = _format_timeline(result)
+    if timeline:
+        print(f"  Timeline: {timeline}")
+
+    if status == "failed":
+        log = _failure_log(result)
+        if log:
+            lines = log.splitlines()
+            tail = lines[-30:] if len(lines) > 30 else lines
+            print(f"\n  Log ({len(lines)} lines, showing last {len(tail)}):")
+            print(
+                _format_log(
+                    "\n".join(tail),
+                    _error_patterns_for_phase(result.failed_phase),
+                )
+            )
 
     profile = extract_profile_summary(result)
     if profile:
@@ -192,8 +281,14 @@ def cmd_judge(campaign: CampaignConfig, dry_run: bool) -> None:
     description = latest.description or ""
     req_tags = getattr(latest, "tags", None)
 
-    current_best = best_result(res, direction=direction)
-    best_val = float(current_best["metric_value"]) if current_best else None
+    cmp_mode = metric_comparison(campaign)
+    if cmp_mode == "rolling_average":
+        window = metric_comparison_window(campaign)
+        avg = rolling_average_result(res, direction=direction, window=window)
+        best_val = avg
+    else:
+        current_best = best_result(res, direction=direction)
+        best_val = float(current_best["metric_value"]) if current_best else None
 
     append_result(
         latest.sequence,
@@ -340,20 +435,54 @@ def cmd_revert(campaign: CampaignConfig, dry_run: bool) -> None:
         print("[dry-run] Skipped push.")
 
 
-def _format_build_log(log: str) -> str:
-    """Highlight error lines in a build log for readability."""
-    error_patterns = ("error:", "FAILED", "fatal:", "undefined reference")
+_BUILD_ERROR_PATTERNS = ("error:", "FAILED", "fatal:", "undefined reference")
+_DEPLOY_ERROR_PATTERNS = ("error:", "FAILED", "fatal:", "timeout", "refused")
+_TEST_ERROR_PATTERNS = ("error:", "FAILED", "FAIL", "timeout", "assertion")
+
+
+def _error_patterns_for_phase(phase: str | None) -> tuple[str, ...]:
+    """Return error highlight patterns for a given phase."""
+    if phase == "deploy":
+        return _DEPLOY_ERROR_PATTERNS
+    if phase == "test":
+        return _TEST_ERROR_PATTERNS
+    return _BUILD_ERROR_PATTERNS
+
+
+def _format_log(log: str, error_patterns: tuple[str, ...] | None = None) -> str:
+    """Highlight error lines in a log for readability."""
+    patterns = error_patterns or _BUILD_ERROR_PATTERNS
     lines = []
     for line in log.splitlines():
-        if any(pat in line for pat in error_patterns):
+        if any(pat in line for pat in patterns):
             lines.append(f">>> {line}")
         else:
             lines.append(f"    {line}")
     return "\n".join(lines)
 
 
-def cmd_build_log(campaign: CampaignConfig, seq: int) -> None:
-    """Print the build log for a given request sequence number."""
+def _get_log_for_phase(
+    request: TestRequest,
+    phase: str,
+) -> str | None:
+    """Return the log snippet for a given phase."""
+    if phase == "build":
+        return request.build_log_snippet
+    if phase == "deploy":
+        return request.deploy_log_snippet
+    if phase == "test":
+        return request.test_log_snippet
+    return None
+
+
+def cmd_logs(
+    campaign: CampaignConfig,
+    seq: int,
+    phase: str | None = None,
+    grep: str | None = None,
+    tail: int | None = None,
+) -> None:
+    """Print logs for a given request, optionally filtered by phase."""
     req = requests_dir()
     request = find_request_by_seq(seq, req)
 
@@ -361,13 +490,123 @@ def cmd_build_log(campaign: CampaignConfig, seq: int) -> None:
         print(f"ERROR: No request found for sequence {seq:04d}.")
         sys.exit(1)
 
-    snippet = request.build_log_snippet
-    if not snippet:
-        print(f"No build log for request {seq:04d}.")
+    # Auto-detect phase from failed_phase, or show all available
+    phases_to_show: list[str] = []
+    if phase:
+        phases_to_show = [phase]
+    elif request.failed_phase:
+        phases_to_show = [request.failed_phase]
+    else:
+        for p in ("build", "deploy", "test"):
+            if _get_log_for_phase(request, p):
+                phases_to_show.append(p)
+
+    if not phases_to_show:
+        print(f"No logs available for request {seq:04d}.")
         return
 
-    print(f"Build log for request {seq:04d}:")
-    print(_format_build_log(snippet))
+    for p in phases_to_show:
+        snippet = _get_log_for_phase(request, p)
+        if not snippet:
+            print(f"No {p} log for request {seq:04d}.")
+            continue
+
+        lines = snippet.splitlines()
+        if grep:
+            lines = [line for line in lines if grep in line]
+        if tail is not None:
+            lines = lines[-tail:]
+
+        print(f"{p.capitalize()} log for request {seq:04d} ({len(lines)} lines):")
+        print(_format_log("\n".join(lines), _error_patterns_for_phase(p)))
+
+
+def _format_inspect(request: TestRequest) -> str:
+    """Format a full human-readable view of a request."""
+    lines = [
+        f"Request {request.sequence:04d}",
+        f"  Status:        {request.status}",
+        f"  Description:   {request.description}",
+        f"  Source commit:  {request.source_commit}",
+        f"  Created at:    {request.created_at}",
+    ]
+
+    if request.tags:
+        lines.append(f"  Tags:          {', '.join(request.tags)}")
+
+    lines.append(
+        f"  Plugins:       build={request.build_plugin} deploy={request.deploy_plugin} "
+        f"test={request.test_plugin}"
+    )
+    if request.profile_plugin:
+        lines.append(f"                 profile={request.profile_plugin}")
+
+    lines.append("")
+    lines.append("  Timeline:")
+    timeline = _format_timeline(request)
+    if timeline:
+        lines.append(f"    {timeline}")
+
+    if request.failed_phase:
+        lines.append(f"  Failed phase:  {request.failed_phase}")
+    if request.error:
+        lines.append(f"  Error:         {request.error}")
+    if request.metric_value is not None:
+        lines.append(f"  Metric:        {request.metric_value}")
+    if request.results_summary:
+        lines.append(f"  Summary:       {request.results_summary}")
+
+    runner_ids = []
+    if request.build_runner_id:
+        runner_ids.append(f"build={request.build_runner_id}")
+    if request.deploy_runner_id:
+        runner_ids.append(f"deploy={request.deploy_runner_id}")
+    if request.test_runner_id:
+        runner_ids.append(f"test={request.test_runner_id}")
+    if runner_ids:
+        lines.append(f"  Runners:       {' '.join(runner_ids)}")
+
+    max_log_lines = 50
+    for phase in ("build", "deploy", "test"):
+        log = _get_log_for_phase(request, phase)
+        if log:
+            log_lines = log.splitlines()
+            shown = log_lines[:max_log_lines]
+            lines.append(f"\n  {phase.capitalize()} log ({len(log_lines)} lines):")
+            lines.append(
+                _format_log(
+                    "\n".join(shown),
+                    _error_patterns_for_phase(phase),
+                )
+            )
+            if len(log_lines) > max_log_lines:
+                lines.append(
+                    f"    ... ({len(log_lines) - max_log_lines} more lines, "
+                    f"use `logs --seq {request.sequence} --phase {phase}` for full output)"
+                )
+
+    if request.results_json:
+        lines.append("\n  Results JSON:")
+        formatted = json.dumps(request.results_json, indent=2)
+        for line in formatted.splitlines():
+            lines.append(f"    {line}")
+
+    return "\n".join(lines)
+
+
+def cmd_inspect(campaign: CampaignConfig, seq: int, as_json: bool = False) -> None:
+    """Print full details for a request."""
+    req = requests_dir()
+    request = find_request_by_seq(seq, req)
+
+    if request is None:
+        print(f"ERROR: No request found for sequence {seq:04d}.")
+        sys.exit(1)
+
+    if as_json:
+        print(request.to_json())
+    else:
+        print(_format_inspect(request))
 
 
 def cmd_hints(
@@ -402,6 +641,19 @@ def cmd_status(campaign: CampaignConfig) -> None:
         print("No requests found.")
         return
     _print_result(latest)
+
+
+def cmd_sysinfo(role: str) -> None:
+    """Collect and save system info for the given role."""
+    import json
+
+    from autoforge.agent.sprint import docs_dir
+    from autoforge.agent.sysinfo import save_sysinfo
+
+    path = save_sysinfo(role, docs_dir())
+    data = json.loads(path.read_text())
+    print(json.dumps(data, indent=2))
+    print(f"\nSaved to {path}")
 
 
 def cmd_summarize(campaign: CampaignConfig) -> None:
@@ -513,6 +765,14 @@ def main() -> None:
         help="List available hint topics for the architecture",
     )
 
+    sysinfo_p = sub.add_parser("sysinfo", help="Collect and save system info")
+    sysinfo_p.add_argument(
+        "--role",
+        required=True,
+        choices=["agent", "build", "test", "runner"],
+        help="Machine role (runner = build + test on same host)",
+    )
+
     submit_p = sub.add_parser("submit", help="Submit a code change for testing")
     submit_p.add_argument(
         "--description",
@@ -527,14 +787,25 @@ def main() -> None:
         help="Comma-separated experiment tags (e.g., memcpy,cache,batching)",
     )
 
-    buildlog_p = sub.add_parser("build-log", help="Print build log for a request")
-    buildlog_p.add_argument(
-        "--seq",
-        "-s",
-        type=int,
-        required=True,
-        help="Request sequence number",
+    logs_p = sub.add_parser("logs", help="Print logs for a request")
+    logs_p.add_argument("--seq", "-s", type=int, required=True, help="Request sequence number")
+    logs_p.add_argument(
+        "--phase",
+        "-p",
+        choices=["build", "deploy", "test"],
+        default=None,
+        help="Phase to show (default: auto-detect from failed_phase, or all available)",
     )
+    logs_p.add_argument("--grep", "-g", default=None, help="Filter lines by substring")
+    logs_p.add_argument("--tail", "-n", type=int, default=None, help="Show only last N lines")
+
+    # Keep build-log as alias for backward compat
+    buildlog_p = sub.add_parser("build-log", help="Print build log for a request (alias for logs)")
+    buildlog_p.add_argument("--seq", "-s", type=int, required=True, help="Request sequence number")
+
+    inspect_p = sub.add_parser("inspect", help="Show full details for a request")
+    inspect_p.add_argument("--seq", "-s", type=int, required=True, help="Request sequence number")
+    inspect_p.add_argument("--json", action="store_true", dest="as_json", help="Output raw JSON")
 
     # Sprint subcommands
     sprint_p = sub.add_parser("sprint", help="Sprint management")
@@ -633,6 +904,10 @@ def _dispatch(args: argparse.Namespace) -> None:
             print(f"Switched to project: {args.name}")
         return
 
+    if args.command == "sysinfo":
+        cmd_sysinfo(args.role)
+        return
+
     if args.command == "doctor":
         from autoforge.agent.doctor import format_results, run_doctor
 
@@ -660,8 +935,12 @@ def _dispatch(args: argparse.Namespace) -> None:
         cmd_finale(campaign, args.dry_run)
     elif args.command == "revert":
         cmd_revert(campaign, args.dry_run)
+    elif args.command == "logs":
+        cmd_logs(campaign, args.seq, phase=args.phase, grep=args.grep, tail=args.tail)
     elif args.command == "build-log":
-        cmd_build_log(campaign, args.seq)
+        cmd_logs(campaign, args.seq, phase="build")
+    elif args.command == "inspect":
+        cmd_inspect(campaign, args.seq, as_json=args.as_json)
     elif args.command == "summarize":
         cmd_summarize(campaign)
     elif args.command == "status":

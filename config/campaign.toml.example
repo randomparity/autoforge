@@ -19,6 +19,12 @@ path = "throughput_mpps"
 direction = "maximize"
 # Stop early if improvement between iterations falls below this value
 threshold = 0.01
+# How to pick the baseline for keep/revert decisions:
+#   "peak"             — compare against the all-time best (default)
+#   "rolling_average"  — compare against the mean of the last N results
+# comparison = "peak"
+# Number of recent results to average when comparison = "rolling_average"
+# comparison_window = 5
 
 [agent]
 # Seconds between polling for test results

@@ -67,6 +67,18 @@ class TestProtocolConformance:
 # Builder tests
 # ---------------------------------------------------------------------------
 
+_TEST_DOCKERFILE = (
+    'ENV SETUPTOOLS_SCM_PRETEND_VERSION="0.0.0+csrc.build"\n'
+    "RUN python3 setup.py bdist_wheel\n"
+    "ENV VLLM_SKIP_PRECOMPILED_VERSION_SUFFIX=1\n"
+    "RUN --mount=type=bind,source=.git,target=.git \\\n"
+    "    python3 setup.py bdist_wheel\n"
+)
+
+
+def _write_test_dockerfile(tmp_path: Path) -> None:
+    (tmp_path / "Dockerfile").write_text(_TEST_DOCKERFILE)
+
 
 class TestVllmContainerBuilder:
     def _make_builder(self, mode: str = "prebuilt") -> Any:
@@ -107,23 +119,32 @@ class TestVllmContainerBuilder:
         assert "TIMEOUT" in result.log
 
     @patch("subprocess.run")
-    def test_source_build_success(self, mock_run: MagicMock) -> None:
+    def test_source_build_success(self, mock_run: MagicMock, tmp_path: Path) -> None:
         mock_run.return_value = _make_completed(0, "built ok")
+        # Create minimal Dockerfile with markers the submodule patch targets
+        _write_test_dockerfile(tmp_path)
         builder = self._make_builder("source")
-        result = builder.build(Path("/src"), "def456", Path("/build"), 600)
+        result = builder.build(tmp_path, "def456", Path("/build"), 600)
         assert result.success
         assert result.artifacts["mode"] == "source"
         assert result.artifacts["commit"] == "def456"
 
     @patch("subprocess.run")
-    def test_source_build_failure(self, mock_run: MagicMock) -> None:
-        # First call (git checkout) succeeds, second (build) fails
+    def test_source_build_failure(self, mock_run: MagicMock, tmp_path: Path) -> None:
+        # 1: git checkout succeeds, 2: git describe fails, 3: git rev-parse succeeds,
+        # 4: git fetch origin main (precompiled base), 5: git merge-base succeeds,
+        # 6: docker build fails
         mock_run.side_effect = [
             _make_completed(0),
+            _make_completed(128, stderr="no tag"),
+            _make_completed(0, stdout="bcf2be96"),
+            _make_completed(0),
+            _make_completed(0, stdout="abc123base"),
             _make_completed(1, stderr="build error"),
         ]
+        _write_test_dockerfile(tmp_path)
         builder = self._make_builder("source")
-        result = builder.build(Path("/src"), "bad", Path("/build"), 600)
+        result = builder.build(tmp_path, "bad", Path("/build"), 600)
         assert not result.success
 
 

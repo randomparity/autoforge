@@ -1,0 +1,70 @@
+timestamp	source_commit	metric_value	description	diff_summary
+2026-03-27T20:10:12.932558+00:00	bcf2be96120005e9aea171927f85055a6a5c0cf6	2385.181648976968	Baseline: unmodified vllm	".buildkite/test_areas/lm_eval.yaml                       | 16 ++++++++++++++++
+ tests/evals/gsm8k/configs/Qwen3.5-35B-A3B-DEP2.yaml      |  8 ++++++++
+ tests/evals/gsm8k/configs/Qwen3.5-35B-A3B-FP8-DEP2.yaml  |  9 +++++++++
+ tests/evals/gsm8k/configs/models-qwen35-blackwell.txt    |  2 ++
+ .../layers/fused_moe/experts/trtllm_fp8_moe.py           | 12 +++++++-----
+ 5 files changed, 42 insertions(+), 5 deletions(-)"
+2026-03-27T21:05:58.814555+00:00	056aeadce31e953bae0cce46a4325a68a8da9a31	2321.214833461755	scheduler _make_cached_request_data pre-allocation only	"vllm/v1/core/sched/utils.py | 15 +++++++--------
+ vllm/v1/request.py          | 22 ----------------------
+ 2 files changed, 7 insertions(+), 30 deletions(-)"
+2026-03-27T21:16:11.594670+00:00	de93094009f260e9aa940298ce712cadb791076a	2302.896881995742	decode fast path in _prepare_inputs: skip np.repeat/cumsum	"vllm/v1/worker/gpu_model_runner.py | 38 +++++++++++++++++++++++++-------------
+ 1 file changed, 25 insertions(+), 13 deletions(-)"
+2026-03-27T22:07:43.790549+00:00	d6e19a735624aa9054a8a6d353dba662a16d7cd0	2398.7517709869303	increase max_num_seqs to 512	"vllm/engine/arg_utils.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-27T22:14:03.750110+00:00	b579dbf29416cc73ace123f413df040a2004721f	2352.957490163978	max_num_batched_tokens to 16384 for all GPU types	"vllm/engine/arg_utils.py | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)"
+2026-03-27T22:19:13.956491+00:00	12da554b90e68d6eeeccf5a95c2d43d486cfd2c8	2397.064897631421	inline single-token append + max_num_batched_tokens=8192	"vllm/v1/core/sched/scheduler.py | 10 ++++++++++
+ 1 file changed, 10 insertions(+)"
+2026-03-27T22:24:13.895137+00:00	b7e592d397049ac1f2dbfa420a533fd86050b23a	2401.2556068019185	disable stats logging + max_num_batched_tokens=8192	"vllm/engine/arg_utils.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-27T22:38:18.362312+00:00	a9b42deba5a4245f6f099cdc3ea8be6a5099fcc4	2404.8999860518843	repeat: batch=8192 + no prefix caching	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-27T22:42:54.193034+00:00	b73009437e01499a44fd69f1070b44eddc53953b	2405.4360882385763	batch=8192 + no prefix caching	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-27T22:47:13.323009+00:00	b4df4e32969ab33ec0e3bd7b4921bae45e9a493a	2411.820040447741	batch=12288 + no prefix caching	"vllm/config/cache.py     | 2 +-
+ vllm/engine/arg_utils.py | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)"
+2026-03-27T22:58:26.071777+00:00	0bf54d824b75adb427f90dcb4b0cc3888662c319	2405.948287226925	batch=8192 + no prefix cache (attempt for higher peak)	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-27T23:07:07.196960+00:00	6a96012bb238b1441932897a0d9e94a467389731	2344.1457253915187	batch=8192 + no prefix cache + no stats (retry)	"vllm/config/cache.py     | 2 +-
+ vllm/engine/arg_utils.py | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)"
+2026-03-27T23:11:33.789859+00:00	cde522cc459efffce9ece0a059cb685d071890eb	2383.685416618132	batch=8192 + no prefix cache only	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-27T23:16:03.673529+00:00	0bb911b484d29f75661b17a241d01a833811c82b	2396.1996910880007	no prefix cache (attempt to lock in)	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-27T23:21:47.635794+00:00	2604369d45af58804e39fae155dadb7806b678a9	2332.239819692605	no prefix cache (persistence)	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-27T23:25:49.069778+00:00	f1c9ca614d91fbb12d7d74622e8b28226e37eb7f	2366.5526992682107	no prefix cache retry	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-27T23:30:10.151968+00:00	d43b5d0b6918e27ef0f267865692324d75b79cff	2359.073854351054	no prefix cache (continued)	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-27T23:34:16.590366+00:00	23a20b981f37f0de44903509fa779df1a12da230	2420.1085259473243	no prefix cache (keep trying)	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-27T23:38:02.106259+00:00	99f89f24bc3b2cc8b33f2d4f8218a3f5e0e24705	2378.6069797857917	no prefix cache	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-27T23:42:38.947869+00:00	d3900f59b807f2332581e670c7b9e05ba5608f86	2364.078724857722	no prefix cache	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-27T23:47:26.928609+00:00	63782b06d9f6b3de779dbf9efdcfefa720b87673	2391.7845480495544	no prefix cache	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-27T23:51:39.587590+00:00	cf962b58883ad9423c75b25e7a1ffbadb2bca5d2	2414.747265491181	no prefix cache	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-27T23:56:04.242935+00:00	a406249894e53bbe27107d51b6721219f90531be	2398.2358266242145	prefix cache disabled	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-28T00:00:31.062896+00:00	0cfd961f7d8385b6c15452512a6658eec4f3c0fb	2384.5718420887415	no prefix cache	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-28T00:04:51.928192+00:00	c519ce58106a3f5830d7bc6a9ec3016b7a6ec76e	2373.7033666119128	no prefix cache	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-28T00:09:05.952522+00:00	cada8a12decfa9978b54a30b78c3d51207850eff	2390.5584045642954	no prefix cache	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-28T00:12:48.215150+00:00	783a0695cac7379264750975cfe705c0ad98fb10	2399.9913669316306	no prefix cache	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-28T00:17:09.822533+00:00	8ba452811c5139ecd0a97306bf5f54f16830df56	2411.544173492258	no prefix cache	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-28T00:21:23.327645+00:00	abf7e24f50b3d2550490c6e5c8034ab5277c5a39	2360.2502501962667	no prefix cache	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-28T00:25:31.165577+00:00	5e09c6b5a7ce7e071f8cb4e2747dcc4722658bb2	2355.065095391274	no prefix cache	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
+2026-03-28T00:29:43.727689+00:00	5c7708a6a3287813d7de478b209a9c1fa8bc3eab	2413.4352954752558	no prefix cache	"vllm/config/cache.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"

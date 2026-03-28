@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from autoforge.agent.history import append_result, best_result, load_history
+from autoforge.agent.history import append_result, best_result, load_history, rolling_average_result
 
 
 def make_tsv(tmp_path: Path) -> Path:
@@ -140,3 +140,40 @@ class TestBestResult:
         append_result(1, "a", None, "failed", "broke", path=path)
         append_result(2, "b", None, "failed", "broke again", path=path)
         assert best_result(path=path) is None
+
+
+class TestRollingAverageResult:
+    def test_normal_case(self, tmp_path) -> None:
+        path = make_tsv(tmp_path)
+        for i, val in enumerate([10.0, 12.0, 14.0, 11.0, 13.0], start=1):
+            append_result(i, f"c{i}", val, "completed", f"iter {i}", path=path)
+        avg = rolling_average_result(path, window=3)
+        assert avg is not None
+        assert abs(avg - (14.0 + 11.0 + 13.0) / 3) < 0.001
+
+    def test_fewer_results_than_window(self, tmp_path) -> None:
+        path = make_tsv(tmp_path)
+        append_result(1, "a", 10.0, "completed", "first", path=path)
+        append_result(2, "b", 20.0, "completed", "second", path=path)
+        avg = rolling_average_result(path, window=5)
+        assert avg is not None
+        assert abs(avg - 15.0) < 0.001
+
+    def test_empty_history(self, tmp_path) -> None:
+        path = make_tsv(tmp_path)
+        assert rolling_average_result(path) is None
+
+    def test_skips_failed_empty_metrics(self, tmp_path) -> None:
+        path = make_tsv(tmp_path)
+        append_result(1, "a", 10.0, "completed", "ok", path=path)
+        append_result(2, "b", None, "failed", "broke", path=path)
+        append_result(3, "c", 20.0, "completed", "ok", path=path)
+        avg = rolling_average_result(path, window=5)
+        assert avg is not None
+        assert abs(avg - 15.0) < 0.001
+
+    def test_all_failed_returns_none(self, tmp_path) -> None:
+        path = make_tsv(tmp_path)
+        append_result(1, "a", None, "failed", "broke", path=path)
+        append_result(2, "b", None, "failed", "again", path=path)
+        assert rolling_average_result(path) is None
