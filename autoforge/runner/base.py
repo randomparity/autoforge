@@ -370,7 +370,12 @@ class PhaseRunner(ABC):
 
     @staticmethod
     def _restart() -> None:
-        """Re-exec the current process to pick up code/config changes."""
+        """Re-exec the current process to pick up code/config changes.
+
+        Replaces the current process image via ``os.execvp``. On success this
+        call never returns. Logs an error and continues if execvp fails (e.g.
+        when the runner was started via ``python -m``).
+        """
         try:
             os.execvp(sys.argv[0], sys.argv)
         except OSError:
