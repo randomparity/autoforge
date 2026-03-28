@@ -435,10 +435,12 @@ appears in results, check these common issues on the runner machine:
    cat /proc/sys/kernel/perf_event_paranoid
    ```
 
-   Must be `<= 1` for non-root profiling. Set it with:
+   Must be `<= 1` for regular call-graph sampling. PEBS precise events
+   (used by some profiler configurations) require `<= 0`. Set it with:
 
    ```bash
-   sudo sysctl kernel.perf_event_paranoid=1
+   sudo sysctl kernel.perf_event_paranoid=1   # regular sampling
+   sudo sysctl kernel.perf_event_paranoid=0   # PEBS precise events
    ```
 
 3. **Verify perf works.** Run a quick test:
@@ -452,6 +454,12 @@ appears in results, check these common issues on the runner machine:
 4. **Profile plugin not set.** Ensure `[project] profiler = "perf-record"` is
    in your campaign.toml. An empty profiler field skips profiling even when
    `profiling.enabled = true`.
+
+5. **Container symbol resolution.** When profiling a containerized process
+   from the host, pass `symfs=f"/proc/{pid}/root"` to `profile_pid()` so
+   `perf script` can find shared libraries inside the container's
+   filesystem. The `perf-container` profiler plugin does this
+   automatically.
 
 ## Judge
 

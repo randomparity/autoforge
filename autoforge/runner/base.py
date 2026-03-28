@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import logging
+import os
+import subprocess
+import sys
+import threading
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Any
 
 from autoforge.campaign import (
     CampaignConfig,
@@ -14,7 +19,7 @@ from autoforge.campaign import (
 from autoforge.campaign import (
     project_config as _project_config,
 )
-from autoforge.git_utils import git_pull_with_stash
+from autoforge.git_utils import code_changed_since, git_head_commit, git_pull_with_stash
 from autoforge.plugins.loader import load_component
 from autoforge.plugins.protocols import BuildResult, DeployResult, RunnerConfig
 from autoforge.pointer import REPO_ROOT
@@ -39,6 +44,18 @@ from autoforge.runner.protocol import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _collect_runner_sysinfo() -> dict[str, Any]:
+    """Collect system info on the runner at startup.
+
+    Returns a dict suitable for embedding in results JSON.
+    """
+    from autoforge.sysinfo import collect_sysinfo
+
+    info = collect_sysinfo()
+    info["role"] = "runner"
+    return info
 
 
 def recover_stale_requests(requests_dir: Path, stale_statuses: frozenset[str]) -> None:
@@ -170,16 +187,120 @@ def _run_deploy(
     return deploy_result
 
 
+def _prepare_profiler(
+    campaign: CampaignConfig,
+    config: RunnerConfig,
+    deploy_result: DeployResult,
+    request: TestRequest | None = None,
+) -> tuple[Any, int, dict[str, Any]] | None:
+    """Load profiler plugin and config. Returns (profiler, duration, config) or None."""
+    profiling_cfg = campaign.get("profiling", {})
+    if not profiling_cfg.get("enabled", False):
+        return None
+
+    # Respect per-request profiler override (e.g. finale requests set
+    # profile_plugin="" to skip profiling).
+    if request is not None and hasattr(request, "profile_plugin") and request.profile_plugin == "":
+        logger.debug("Profiling skipped: request has empty profile_plugin")
+        return None
+
+    proj_cfg = _project_config(campaign)
+    proj_name = project_name(campaign)
+    profiler_name = proj_cfg.get("profiler")
+    if not profiler_name:
+        logger.debug("Profiling enabled but no profiler plugin configured")
+        return None
+
+    try:
+        profiler = load_component(
+            proj_name,
+            "profiler",
+            profiler_name,
+            project_config=proj_cfg,
+            runner_config=config,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        logger.warning("Failed to load profiler %r: %s", profiler_name, exc)
+        return None
+
+    duration = int(profiling_cfg.get("duration", 30))
+    startup_delay = int(profiling_cfg.get("startup_delay", 5))
+    profile_config: dict[str, Any] = {
+        **deploy_result.target_info,
+        "startup_delay": startup_delay,
+    }
+    return profiler, duration, profile_config
+
+
+def _run_profile_thread(
+    profiler: Any,
+    duration: int,
+    profile_config: dict[str, Any],
+    result_holder: list[dict[str, Any] | None],
+) -> None:
+    """Run profiler in a background thread with a startup delay.
+
+    Waits for the benchmark to generate load before capturing a profile.
+    The result is stored in result_holder[0].
+    """
+    startup_delay = profile_config.pop("startup_delay", 5)
+    profiler_name = getattr(profiler, "name", "unknown")
+
+    logger.info(
+        "Profiler %r waiting %ds for benchmark warmup",
+        profiler_name,
+        startup_delay,
+    )
+    time.sleep(startup_delay)
+
+    logger.info("Running profiler %r for %ds", profiler_name, duration)
+    try:
+        result = profiler.profile(pid=0, duration=duration, config=profile_config)
+    except Exception:
+        logger.exception("Profiler %r raised an exception", profiler_name)
+        return
+
+    if not result.success:
+        logger.warning("Profiler %r failed: %s", profiler_name, result.error)
+        return
+
+    logger.info(
+        "Profiling complete (%s, %.1fs)",
+        profiler_name,
+        result.duration_seconds,
+    )
+    result_holder[0] = result.summary
+
+
+def _cleanup_deploy_target(deploy_result: DeployResult) -> None:
+    """Remove the deploy target (container) after test and profiling complete."""
+    target_info = deploy_result.target_info
+    container_name = target_info.get("container_name")
+    if not container_name:
+        return
+    runtime = target_info.get("runtime", "docker")
+    try:
+        subprocess.run(
+            [runtime, "rm", "-f", container_name],
+            capture_output=True,
+            timeout=30,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        logger.warning("Failed to clean up container %s", container_name)
+
+
 def _run_test(
     request: TestRequest,
     request_path: Path,
     campaign: CampaignConfig,
     config: RunnerConfig,
     deploy_result: DeployResult | None = None,
+    runner_sysinfo: dict[str, Any] | None = None,
 ) -> None:
     """Execute the test phase and update request to completed/failed.
 
     When deploy_result is None (split-runner mode), a stub is constructed from config.
+    Profiling runs concurrently with the test in a background thread.
     """
     if deploy_result is None:
         deploy_result = _deploy_result_from_config(config)
@@ -196,8 +317,36 @@ def _run_test(
         runner_config=config,
     )
 
+    # Prepare profiler before starting the test so it can run concurrently.
+    profiler_setup = _prepare_profiler(campaign, config, deploy_result, request)
+    profile_result: list[dict[str, Any] | None] = [None]
+    profile_thread: threading.Thread | None = None
+
     update_status(request, STATUS_RUNNING, request_path)
-    test_result = tester.test(deploy_result, timeout=test_timeout)
+
+    # Start profiler thread before the test so it captures during benchmark execution.
+    join_timeout = 60
+    if profiler_setup is not None:
+        from autoforge.perf.profile import PERF_TIMEOUT_MARGIN
+
+        profiler, duration, profile_config = profiler_setup
+        startup_delay = profile_config.get("startup_delay", 5)
+        join_timeout = startup_delay + duration + PERF_TIMEOUT_MARGIN + 10
+        profile_thread = threading.Thread(
+            target=_run_profile_thread,
+            args=(profiler, duration, profile_config, profile_result),
+            daemon=True,
+        )
+        profile_thread.start()
+
+    try:
+        test_result = tester.test(deploy_result, timeout=test_timeout)
+    finally:
+        # Wait for profiler to finish (it may already be done).
+        if profile_thread is not None:
+            profile_thread.join(timeout=join_timeout)
+        # Clean up the deploy target (e.g. container) after profiling completes.
+        _cleanup_deploy_target(deploy_result)
 
     if not test_result.success:
         fail(
@@ -209,10 +358,16 @@ def _run_test(
         )
         return
 
+    results_json = test_result.results_json or {}
+    if profile_result[0] is not None:
+        results_json["profile"] = profile_result[0]
+    if runner_sysinfo is not None:
+        results_json["runner_sysinfo"] = runner_sysinfo
+
     complete_request(
         request,
         request_path,
-        results_json=test_result.results_json,
+        results_json=results_json,
         results_summary=test_result.results_summary,
         metric_value=test_result.metric_value,
     )
@@ -235,9 +390,24 @@ class PhaseRunner(ABC):
         self.requests_dir = requests_dir
         self.runner_id = config.get("runner", {}).get("runner_id", "")
         self.poll_interval = int(config.get("runner", {}).get("poll_interval", 30))
+        self._startup_commit = git_head_commit(REPO_ROOT)
+        self._runner_sysinfo = _collect_runner_sysinfo()
 
     needs_claim: bool = False
     """Whether this runner must claim requests before executing."""
+
+    @staticmethod
+    def _restart() -> None:
+        """Re-exec the current process to pick up code/config changes.
+
+        Replaces the current process image via ``os.execvp``. On success this
+        call never returns. Logs an error and continues if execvp fails (e.g.
+        when the runner was started via ``python -m``).
+        """
+        try:
+            os.execvp(sys.argv[0], sys.argv)
+        except OSError:
+            logger.error("os.execvp(%r) failed; continuing without restart", sys.argv[0])
 
     @abstractmethod
     def execute_phase(self, request: TestRequest, request_path: Path) -> None:
@@ -260,6 +430,15 @@ class PhaseRunner(ABC):
                     logger.warning("Git pull failed, retrying next cycle")
                     time.sleep(self.poll_interval)
                     continue
+
+                if self._startup_commit is not None and code_changed_since(
+                    REPO_ROOT, self._startup_commit
+                ):
+                    logger.info(
+                        "Code/config changed since startup (%s); restarting",
+                        self._startup_commit[:8],
+                    )
+                    self._restart()
 
                 result = find_by_status(self.requests_dir, self.watch_status)
                 if result is None:
@@ -333,7 +512,13 @@ class TestRunner(PhaseRunner):
     stale_statuses = frozenset({STATUS_RUNNING})
 
     def execute_phase(self, request: TestRequest, request_path: Path) -> None:
-        _run_test(request, request_path, self.campaign, self.config)
+        _run_test(
+            request,
+            request_path,
+            self.campaign,
+            self.config,
+            runner_sysinfo=self._runner_sysinfo,
+        )
 
 
 class FullRunner(PhaseRunner):
@@ -361,4 +546,11 @@ class FullRunner(PhaseRunner):
         if deploy_result is None:
             return
 
-        _run_test(request, request_path, self.campaign, self.config, deploy_result)
+        _run_test(
+            request,
+            request_path,
+            self.campaign,
+            self.config,
+            deploy_result,
+            runner_sysinfo=self._runner_sysinfo,
+        )

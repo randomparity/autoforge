@@ -5,9 +5,13 @@
 ### perf/profile.py
 - `-g` and `--call-graph` flags are mutually exclusive in perf record.
   `-g` expands to `--call-graph fp`. Correct: `--call-graph dwarf,16384` alone.
+  feat/vllm-perf-profiling: added explicit `-e cycles` before `--call-graph dwarf` — correct.
 - `perf stat` return code is never checked after `communicate()`. Silent counter
   failure yields an empty counters dict without any error surfaced to the caller.
 - No `--max-size` on `perf record` — unbounded perf.data growth on long runs.
+- Thread join timeout pattern: profile thread join(timeout=60) is insufficient.
+  Total thread time = startup_delay(5) + duration(30) + PERF_TIMEOUT_MARGIN(30) = 65s.
+  Fix: join timeout = startup_delay + duration + PERF_TIMEOUT_MARGIN + 10s slack.
 
 ### perf/arch/s390x.json
 - `stalled_backend` mapped to `CPU_CYCLES:u` (total cycles, not stall cycles).
@@ -21,7 +25,10 @@
 - No bpftrace timeout bound — scripts run indefinitely if not interrupted.
 
 ### Import rule violations (recurring)
-- runner/ importing from agent/ was fixed in refactor/continued-quality-improvements.
+- runner/ importing from agent/ was fixed in refactor/continued-quality-improvements,
+  but reintroduced in feat/vllm-perf-profiling: runner/base.py line 54 imports
+  `from autoforge.agent.sysinfo import collect_sysinfo`. Fix: move sysinfo to
+  `autoforge/sysinfo.py` (shared module at top-level alongside git_utils.py).
 - Tests must use `autoforge.protocol` facade, not `autoforge.protocol.schema` directly.
   Violation in `tests/test_schema.py` line 9.
 - `Direction` is now in `autoforge.protocol` (moved from `autoforge.agent.metric`).

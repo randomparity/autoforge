@@ -55,6 +55,55 @@ def git_pull_with_stash(repo_root: Path, *, timeout: int = GIT_TIMEOUT) -> bool:
     return pull_result.returncode == 0
 
 
+def git_head_commit(repo_root: Path) -> str | None:
+    """Return the current HEAD commit hash, or None on failure.
+
+    Args:
+        repo_root: Root of the git repository.
+
+    Returns:
+        The full SHA-1 hash of HEAD, or None if the command fails
+        (empty repo, missing git binary, timeout, etc.).
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=GIT_TIMEOUT,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
+
+
+def code_changed_since(repo_root: Path, since_commit: str) -> bool:
+    """Check if any .py or .toml files changed between since_commit and HEAD.
+
+    Args:
+        repo_root: Root of the git repository.
+        since_commit: Commit hash to diff against HEAD.
+
+    Returns:
+        True if at least one ``.py`` or ``.toml`` file changed.
+        False on git errors (defensive — never trigger restart on failure).
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(repo_root), "diff", "--name-only", since_commit, "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=GIT_TIMEOUT,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return False
+    if result.returncode != 0:
+        return False
+    return any(line.endswith((".py", ".toml")) for line in result.stdout.splitlines())
+
+
 def git_push_with_retry(
     repo_root: Path | None = None,
     *,

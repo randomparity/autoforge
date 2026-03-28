@@ -1,0 +1,126 @@
+{
+  "sequence": 13,
+  "created_at": "2026-03-28T14:13:52.098204+00:00",
+  "source_commit": "828a2d386b227723ecb3edb319ecd20f9c07bc06",
+  "description": "Fix init + stacked micro-optimizations for scheduler hot path",
+  "build_plugin": "container",
+  "deploy_plugin": "container-gpu",
+  "test_plugin": "bench-serving",
+  "profile_plugin": "perf-container",
+  "tags": null,
+  "metric_name": "output_throughput",
+  "metric_path": "output_throughput",
+  "status": "completed",
+  "claimed_at": "2026-03-28T14:14:03.820470+00:00",
+  "built_at": null,
+  "deployed_at": null,
+  "completed_at": "2026-03-28T14:17:28.434573+00:00",
+  "build_runner_id": null,
+  "deploy_runner_id": null,
+  "test_runner_id": null,
+  "build_log_snippet": null,
+  "deploy_log_snippet": null,
+  "test_log_snippet": null,
+  "failed_phase": null,
+  "results_json": {
+    "date": "20260328-141707",
+    "endpoint_type": "vllm",
+    "backend": "vllm",
+    "label": null,
+    "model_id": "Qwen/Qwen3-0.6B",
+    "tokenizer_id": "Qwen/Qwen3-0.6B",
+    "num_prompts": 100,
+    "request_rate": "inf",
+    "burstiness": 1.0,
+    "max_concurrency": 64,
+    "duration": 10.750510010984726,
+    "completed": 100,
+    "failed": 0,
+    "total_input_tokens": 51200,
+    "total_output_tokens": 25600,
+    "request_throughput": 9.301884273194606,
+    "request_goodput": null,
+    "output_throughput": 2381.282373937819,
+    "total_token_throughput": 7143.847121813457,
+    "max_output_tokens_per_s": 5824.0,
+    "max_concurrent_requests": 100,
+    "rtfx": 0.0,
+    "mean_ttft_ms": 3515.692977900617,
+    "median_ttft_ms": 5321.837798983324,
+    "std_ttft_ms": 2547.4277079074213,
+    "p99_ttft_ms": 5609.774966283003,
+    "mean_tpot_ms": 10.755372094349964,
+    "median_tpot_ms": 11.54661527053024,
+    "std_tpot_ms": 2.9320951433841027,
+    "p99_tpot_ms": 12.747518481700506,
+    "mean_itl_ms": 10.755372544547415,
+    "median_itl_ms": 10.779486503452063,
+    "std_itl_ms": 31.838257954614125,
+    "p99_itl_ms": 13.646988694963511,
+    "profile": {
+      "top_functions": [
+        {
+          "name": "[unknown]",
+          "samples": 45,
+          "pct": 32.85
+        },
+        {
+          "name": "_PyEval_EvalFrameDefault",
+          "samples": 31,
+          "pct": 22.63
+        },
+        {
+          "name": "tokenizers::models::bpe::word::Word::merge_all",
+          "samples": 8,
+          "pct": 5.84
+        },
+        {
+          "name": "<core::iter::adapters::flatten::FlatMap<I,U,F> as core::iter::traits::iterator::Iterator>::next",
+          "samples": 6,
+          "pct": 4.38
+        },
+        {
+          "name": "PyObject_GC_Del",
+          "samples": 5,
+          "pct": 3.65
+        },
+        {
+          "name": "core::ops::function::impls::<impl core::ops::function::FnMut<A> for &mut F>::call_mut",
+          "samples": 3,
+          "pct": 2.19
+        },
+        {
+          "name": "tokenizers::models::bpe::model::BPE::merge_word",
+          "samples": 3,
+          "pct": 2.19
+        },
+        {
+          "name": "malloc",
+          "samples": 3,
+          "pct": 2.19
+        },
+        {
+          "name": "<core::iter::adapters::map::Map<I,F> as core::iter::traits::iterator::Iterator>::fold",
+          "samples": 2,
+          "pct": 1.46
+        },
+        {
+          "name": "<core::hash::sip::Hasher<S> as core::hash::Hasher>::write",
+          "samples": 2,
+          "pct": 1.46
+        }
+      ],
+      "derived_metrics": {
+        "ipc": 1.937696,
+        "l1d_miss_rate": 0.012539,
+        "llc_miss_rate": 0.000172,
+        "branch_miss_rate": 0.002081
+      },
+      "diagnostics": [],
+      "total_samples": 137
+    }
+  },
+  "results_summary": "2381.3 tok/s output | TTFT 5321.8ms | TPOT 11.55ms",
+  "metric_value": 2381.282373937819,
+  "error": null
+}

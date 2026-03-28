@@ -1,0 +1,66 @@
+[campaign]
+name = "vllm-serving-throughput"
+max_iterations = 50
+
+[sprint]
+description = "vLLM serving throughput optimization with Linux perf CPU profiling"
+parent = "2026-03-27-vllm-source-opt"
+
+[metric]
+name = "output_throughput"
+path = "output_throughput"
+direction = "maximize"
+threshold = 1.0    # keep changes that improve output_throughput by >= 1.0 tok/s (absolute delta)
+
+[platform]
+arch = "x86_64"
+gpu = "nvidia"
+
+[agent]
+poll_interval = 30
+timeout_minutes = 60
+
+[project]
+name = "vllm"
+build = "container"
+deploy = "container-gpu"
+test = "bench-serving"
+profiler = "perf-container"
+submodule_path = "projects/vllm/repo"
+optimization_branch = "autoforge/2026-03-27-vllm-perf-profiling"
+scope = [
+    "vllm/v1/core/",
+    "vllm/v1/engine/",
+    "vllm/v1/worker/",
+    "vllm/core/",
+    "vllm/engine/",
+    "vllm/worker/",
+    "vllm/model_executor/layers/sampler.py",
+    "vllm/transformers_utils/",
+    "vllm/sequence.py",
+    "vllm/outputs.py",
+    "vllm/utils.py",
+]
+
+[goal]
+description = """
+Optimize Python-level serving throughput for Qwen3-0.6B on vLLM.
+
+With a tiny model (0.6B params), GPU compute is fast and the bottleneck shifts to
+Python overhead: scheduler decisions, memory management, input preparation, output
+processing, and IPC between engine components.
+
+VLLM_USE_PRECOMPILED=1 means CUDA kernels are prebuilt wheels — you cannot modify
+them. Focus exclusively on Python code in the serving hot path.
+
+Key optimization targets:
+1. V1 Scheduler — batch formation, chunked-prefill decisions, request scheduling
+2. KV Cache Manager — block allocation, prefix caching, free-block tracking
+3. GPU Model Runner — input tensor preparation, metadata construction
+4. Sampler — sampling logic, logprob computation, output token processing
+5. Engine Core — async orchestration, IPC overhead, request routing
+6. Tokenizer/Detokenizer — batch decoding, vocabulary lookup efficiency
+"""
+
+[profiling]
+enabled = true

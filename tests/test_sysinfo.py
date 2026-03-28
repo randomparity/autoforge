@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
-from autoforge.agent.sysinfo import (
+from autoforge.sysinfo import (
     VALID_ROLES,
     collect_sysinfo,
     load_all_sysinfo,
@@ -108,6 +108,69 @@ class TestLoadAllSysinfo:
         loaded = load_all_sysinfo(tmp_path)
         assert "agent" in loaded
         assert "bad" not in loaded
+
+
+class TestLoadAllSysinfoFromRequests:
+    def test_runner_sysinfo_from_completed_request(self, tmp_path: Path) -> None:
+        """Runner sysinfo embedded in a completed request is extracted and preferred."""
+        import json
+
+        from autoforge.protocol import TestRequest
+
+        docs = tmp_path / "docs"
+        docs.mkdir()
+        # Write a stale sysinfo-runner.json
+        stale = {"role": "runner", "hostname": "stale-host", "arch": "x86_64"}
+        (docs / "sysinfo-runner.json").write_text(json.dumps(stale))
+
+        # Write a completed request with runner_sysinfo
+        req_dir = tmp_path / "requests"
+        req_dir.mkdir()
+        runner_info = {"role": "runner", "hostname": "real-runner", "arch": "x86_64"}
+        req = TestRequest(
+            sequence=1,
+            created_at="2026-01-01T00:00:00",
+            source_commit="abc123",
+            description="test",
+            build_plugin="container",
+            deploy_plugin="container-gpu",
+            test_plugin="bench-serving",
+            status="completed",
+            metric_value=100.0,
+            results_json={"runner_sysinfo": runner_info},
+        )
+        req_path = req_dir / "0001_test.json"
+        req_path.write_text(req.to_json())
+
+        loaded = load_all_sysinfo(docs, requests_dir=req_dir)
+        assert loaded["runner"]["hostname"] == "real-runner"
+
+    def test_non_completed_request_skipped(self, tmp_path: Path) -> None:
+        """Non-completed requests are not used for runner sysinfo."""
+        from autoforge.protocol import TestRequest
+
+        docs = tmp_path / "docs"
+        docs.mkdir()
+
+        req_dir = tmp_path / "requests"
+        req_dir.mkdir()
+        runner_info = {"role": "runner", "hostname": "real-runner", "arch": "x86_64"}
+        req = TestRequest(
+            sequence=1,
+            created_at="2026-01-01T00:00:00",
+            source_commit="abc123",
+            description="test",
+            build_plugin="container",
+            deploy_plugin="container-gpu",
+            test_plugin="bench-serving",
+            status="running",
+            results_json={"runner_sysinfo": runner_info},
+        )
+        req_path = req_dir / "0001_test.json"
+        req_path.write_text(req.to_json())
+
+        loaded = load_all_sysinfo(docs, requests_dir=req_dir)
+        assert "runner" not in loaded
 
 
 class TestRenderSysinfoSection:

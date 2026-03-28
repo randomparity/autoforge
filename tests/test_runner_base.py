@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from autoforge.agent.protocol import create_request
-from autoforge.git_utils import git_pull_with_stash
+from autoforge.git_utils import code_changed_since, git_head_commit, git_pull_with_stash
 from autoforge.plugins.protocols import BuildResult, DeployResult, TestResult
 from autoforge.protocol import (
     STATUS_BUILDING,
@@ -139,6 +140,149 @@ class TestRecoverStaleRequests:
         (tmp_path / "0001_bad.json").write_text("not json {{{")
         recover_stale_requests(tmp_path, frozenset({"claimed"}))
         mock_fail.assert_not_called()
+
+
+class TestGitHeadCommit:
+    @patch("autoforge.git_utils.subprocess.run")
+    def test_returns_hash_on_success(self, mock_run, tmp_path) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(
+            [], 0, stdout="abc123def456\n", stderr=""
+        )
+        assert git_head_commit(tmp_path) == "abc123def456"
+
+    @patch("autoforge.git_utils.subprocess.run")
+    def test_returns_none_on_failure(self, mock_run, tmp_path) -> None:
+        mock_run.return_value = subprocess.CompletedProcess([], 128, stdout="", stderr="error")
+        assert git_head_commit(tmp_path) is None
+
+    @patch("autoforge.git_utils.subprocess.run", side_effect=subprocess.TimeoutExpired([], 10))
+    def test_returns_none_on_timeout(self, mock_run, tmp_path) -> None:
+        assert git_head_commit(tmp_path) is None
+
+
+class TestCodeChangedSince:
+    @patch("autoforge.git_utils.subprocess.run")
+    def test_returns_true_for_py_changes(self, mock_run, tmp_path) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(
+            [], 0, stdout="autoforge/runner/base.py\n", stderr=""
+        )
+        assert code_changed_since(tmp_path, "abc123") is True
+
+    @patch("autoforge.git_utils.subprocess.run")
+    def test_returns_true_for_toml_changes(self, mock_run, tmp_path) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(
+            [], 0, stdout="projects/dpdk/runner.toml\n", stderr=""
+        )
+        assert code_changed_since(tmp_path, "abc123") is True
+
+    @patch("autoforge.git_utils.subprocess.run")
+    def test_returns_false_for_json_tsv_only(self, mock_run, tmp_path) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(
+            [], 0, stdout="requests/0001.json\nresults.tsv\n", stderr=""
+        )
+        assert code_changed_since(tmp_path, "abc123") is False
+
+    @patch("autoforge.git_utils.subprocess.run")
+    def test_returns_false_on_git_failure(self, mock_run, tmp_path) -> None:
+        mock_run.return_value = subprocess.CompletedProcess([], 1, stdout="", stderr="error")
+        assert code_changed_since(tmp_path, "abc123") is False
+
+    @patch("autoforge.git_utils.subprocess.run")
+    def test_returns_true_for_mixed_files(self, mock_run, tmp_path) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(
+            [], 0, stdout="requests/0001.json\nautoforge/config.py\n", stderr=""
+        )
+        assert code_changed_since(tmp_path, "abc123") is True
+
+
+class TestPollLoopAutoRestart:
+    @patch("autoforge.runner.base.git_head_commit", return_value="startup123")
+    @patch("autoforge.runner.base.recover_stale_requests")
+    def test_restart_called_when_code_changed(self, _mock_recover, _mock_head, tmp_path) -> None:
+        runner = BuildRunner(config=SAMPLE_CONFIG, campaign=SAMPLE_CAMPAIGN, requests_dir=tmp_path)
+        runner._startup_commit = "startup123"
+
+        with (
+            patch("autoforge.runner.base.git_pull_with_stash", return_value=True),
+            patch("autoforge.runner.base.code_changed_since", return_value=True),
+            patch.object(runner, "_restart") as mock_restart,
+        ):
+            mock_restart.side_effect = SystemExit(0)
+            with contextlib.suppress(SystemExit):
+                runner.poll_loop()
+            mock_restart.assert_called_once()
+
+    @patch("autoforge.runner.base.git_head_commit", return_value="startup123")
+    @patch("autoforge.runner.base.recover_stale_requests")
+    def test_no_restart_when_no_changes(self, _mock_recover, _mock_head, tmp_path) -> None:
+        runner = BuildRunner(config=SAMPLE_CONFIG, campaign=SAMPLE_CAMPAIGN, requests_dir=tmp_path)
+        runner._startup_commit = "startup123"
+        call_count = 0
+
+        def pull_side_effect(*_a, **_kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count > 1:
+                raise KeyboardInterrupt
+            return True
+
+        with (
+            patch("autoforge.runner.base.git_pull_with_stash", side_effect=pull_side_effect),
+            patch("autoforge.runner.base.code_changed_since", return_value=False),
+            patch("autoforge.runner.base.find_by_status", return_value=None),
+            patch.object(runner, "_restart") as mock_restart,
+            patch("autoforge.runner.base.time.sleep"),
+        ):
+            runner.poll_loop()
+            mock_restart.assert_not_called()
+
+    @patch("autoforge.runner.base.git_head_commit", return_value="startup123")
+    @patch("autoforge.runner.base.recover_stale_requests")
+    def test_no_restart_when_pull_fails(self, _mock_recover, _mock_head, tmp_path) -> None:
+        runner = BuildRunner(config=SAMPLE_CONFIG, campaign=SAMPLE_CAMPAIGN, requests_dir=tmp_path)
+        call_count = 0
+
+        def pull_side_effect(*_a, **_kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count > 1:
+                raise KeyboardInterrupt
+            return False
+
+        with (
+            patch("autoforge.runner.base.git_pull_with_stash", side_effect=pull_side_effect),
+            patch("autoforge.runner.base.code_changed_since") as mock_changed,
+            patch.object(runner, "_restart") as mock_restart,
+            patch("autoforge.runner.base.time.sleep"),
+        ):
+            runner.poll_loop()
+            mock_changed.assert_not_called()
+            mock_restart.assert_not_called()
+
+    @patch("autoforge.runner.base.git_head_commit", return_value=None)
+    @patch("autoforge.runner.base.recover_stale_requests")
+    def test_no_restart_when_startup_commit_none(self, _mock_recover, _mock_head, tmp_path) -> None:
+        runner = BuildRunner(config=SAMPLE_CONFIG, campaign=SAMPLE_CAMPAIGN, requests_dir=tmp_path)
+        assert runner._startup_commit is None
+        call_count = 0
+
+        def pull_side_effect(*_a, **_kw):
+            nonlocal call_count
+            call_count += 1
+            if call_count > 1:
+                raise KeyboardInterrupt
+            return True
+
+        with (
+            patch("autoforge.runner.base.git_pull_with_stash", side_effect=pull_side_effect),
+            patch("autoforge.runner.base.code_changed_since") as mock_changed,
+            patch("autoforge.runner.base.find_by_status", return_value=None),
+            patch.object(runner, "_restart") as mock_restart,
+            patch("autoforge.runner.base.time.sleep"),
+        ):
+            runner.poll_loop()
+            mock_changed.assert_not_called()
+            mock_restart.assert_not_called()
 
 
 class TestPhaseRunnerInit:

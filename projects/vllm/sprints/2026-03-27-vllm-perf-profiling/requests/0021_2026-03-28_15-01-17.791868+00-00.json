@@ -1,0 +1,135 @@
+{
+  "sequence": 21,
+  "created_at": "2026-03-28T15:01:17.791868+00:00",
+  "source_commit": "eeaaeea6893d48137a3676e4a692a21094dbbde4",
+  "description": "Raise GC gen-0 threshold to reduce collection frequency during serving",
+  "build_plugin": "container",
+  "deploy_plugin": "container-gpu",
+  "test_plugin": "bench-serving",
+  "profile_plugin": "perf-container",
+  "tags": null,
+  "metric_name": "output_throughput",
+  "metric_path": "output_throughput",
+  "status": "completed",
+  "claimed_at": "2026-03-28T15:01:42.801828+00:00",
+  "built_at": null,
+  "deployed_at": null,
+  "completed_at": "2026-03-28T15:06:01.704097+00:00",
+  "build_runner_id": null,
+  "deploy_runner_id": null,
+  "test_runner_id": null,
+  "build_log_snippet": null,
+  "deploy_log_snippet": null,
+  "test_log_snippet": null,
+  "failed_phase": null,
+  "results_json": {
+    "date": "20260328-150601",
+    "endpoint_type": "vllm",
+    "backend": "vllm",
+    "label": null,
+    "model_id": "Qwen/Qwen3-0.6B",
+    "tokenizer_id": "Qwen/Qwen3-0.6B",
+    "num_prompts": 200.0,
+    "request_rate": "inf",
+    "burstiness": 1.0,
+    "max_concurrency": 64.0,
+    "duration": 10.26732716850529,
+    "completed": 200.0,
+    "failed": 0.0,
+    "total_input_tokens": 102400.0,
+    "total_output_tokens": 51200.0,
+    "request_throughput": 19.480174053471632,
+    "request_goodput": null,
+    "output_throughput": 4986.924557688738,
+    "total_token_throughput": 14960.773673066213,
+    "max_output_tokens_per_s": 5625.5,
+    "max_concurrent_requests": 127.0,
+    "rtfx": 0.0,
+    "mean_ttft_ms": 114.75589711550128,
+    "median_ttft_ms": 98.04903850454139,
+    "std_ttft_ms": 47.60636274172367,
+    "p99_ttft_ms": 202.71470262057846,
+    "mean_tpot_ms": 11.268844766217894,
+    "median_tpot_ms": 11.54608622793389,
+    "std_tpot_ms": 1.3408877086994058,
+    "p99_tpot_ms": 11.649176291876024,
+    "mean_itl_ms": 11.26945281229248,
+    "median_itl_ms": 11.401970998122124,
+    "std_itl_ms": 2.0830673808212996,
+    "p99_itl_ms": 18.74415844555188,
+    "iterations": 5,
+    "warmup_excluded": true,
+    "per_iteration": [
+      3121.019111548669,
+      4928.212279485542,
+      5007.422434784999,
+      5006.982263656162,
+      5005.081252828248
+    ],
+    "profile": {
+      "top_functions": [
+        {
+          "name": "[unknown]",
+          "samples": 153,
+          "pct": 37.05
+        },
+        {
+          "name": "_PyEval_EvalFrameDefault",
+          "samples": 72,
+          "pct": 17.43
+        },
+        {
+          "name": "tokenizers::models::bpe::word::Word::merge_all",
+          "samples": 22,
+          "pct": 5.33
+        },
+        {
+          "name": "<tokenizers::models::ModelWrapper as tokenizers::tokenizer::Model>::id_to_token",
+          "samples": 7,
+          "pct": 1.69
+        },
+        {
+          "name": "<core::iter::adapters::flatten::FlatMap<I,U,F> as core::iter::traits::iterator::Iterator>::next",
+          "samples": 6,
+          "pct": 1.45
+        },
+        {
+          "name": "<core::iter::adapters::map::Map<I,F> as core::iter::traits::iterator::Iterator>::fold",
+          "samples": 5,
+          "pct": 1.21
+        },
+        {
+          "name": "_PyObject_MakeTpCall",
+          "samples": 5,
+          "pct": 1.21
+        },
+        {
+          "name": "cfree",
+          "samples": 4,
+          "pct": 0.97
+        },
+        {
+          "name": "<tokenizers::models::PyModel as tokenizers::tokenizer::Model>::id_to_token",
+          "samples": 4,
+          "pct": 0.97
+        },
+        {
+          "name": "PyObject_GC_Del",
+          "samples": 4,
+          "pct": 0.97
+        }
+      ],
+      "derived_metrics": {
+        "ipc": 1.954273,
+        "l1d_miss_rate": 0.01279,
+        "llc_miss_rate": 0.000143,
+        "branch_miss_rate": 0.002017
+      },
+      "diagnostics": [],
+      "total_samples": 413
+    }
+  },
+  "results_summary": "4986.9 tok/s output | TTFT 98.0ms | TPOT 11.55ms",
+  "metric_value": 4986.924557688738,
+  "error": null
+}

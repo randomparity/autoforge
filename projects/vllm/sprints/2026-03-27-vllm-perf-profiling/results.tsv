@@ -1,0 +1,19 @@
+sequence	timestamp	source_commit	metric_value	status	description	tags
+1	2026-03-28T12:30:13.042562+00:00	0bc9670741aa430d35e240802b030740e34b5c89	2393.56299291657	completed	Baseline: unmodified vllm
+2	2026-03-28T13:15:11.875813+00:00	32c50d240b9fdfda9ab6917845f917cee13223d1	2425.4898548186898	completed	Optimize check_stop and _update_request_with_output for decode fast path
+3	2026-03-28T13:21:48.340979+00:00	d9470e8fd534c346bc6c70e2f6dd297d6f5f6047	2379.1904879463746	completed	Add decode-only fast path in _prepare_inputs to skip numpy ops
+4	2026-03-28T13:27:57.685661+00:00	440076749eb2e9341fb5b543582b5ad8cc6b9191	2290.5326983588084	completed	Reduce per-request Python overhead in scheduler hot loops
+9	2026-03-28T13:46:38.088704+00:00	32c50d240b9fdfda9ab6917845f917cee13223d1	2400.4788468468255	completed	Baseline: unmodified vllm
+10	2026-03-28T13:52:08.714817+00:00	8c6d3d28c2296420b261739124e487d605cb2799	2404.0678942114773	completed	Hoist attribute lookups and skip invariant checks in scheduler hot loops
+11	2026-03-28T14:00:57.084456+00:00	8ea616a2bf42369bbf4d2bb01b8b1df29d37c090	2372.137327368912	completed	Pure-decode fast path in _prepare_inputs with correct dtypes
+13	2026-03-28T14:17:42.803194+00:00	828a2d386b227723ecb3edb319ecd20f9c07bc06	2381.282373937819	completed	Fix init + stacked micro-optimizations for scheduler hot path
+14	2026-03-28T14:25:54.103873+00:00	9cc95b6c66ec6e07550a9f420a0c202487feca2d	2432.0618141260597	completed	Remove context manager overhead from allocate_slots in hot loop
+15	2026-03-28T14:31:36.407629+00:00	fde1375b068d645c1c48733c052df0fe91526246	2357.819964323377	completed	Cache local refs in scheduler hot loops to reduce attribute lookups
+17	2026-03-28T14:44:10.031317+00:00	ee0947a60ac32b7ca08b6f6b918b93aa21c274aa	4635.846821531732	completed	Baseline: unmodified vllm
+18	2026-03-28T14:48:07.642119+00:00	ee0947a60ac32b7ca08b6f6b918b93aa21c274aa	4992.904617401475	completed	Baseline: unmodified vllm
+19	2026-03-28T14:53:18.517725+00:00	0bc9670741aa430d35e240802b030740e34b5c89	4986.622631657157	completed	Baseline: unmodified vllm
+20	2026-03-28T14:58:28.351084+00:00	e0b7d39f7650a8a1364bd8ce66c0b7fa4a914222	4964.471631958772	completed	Combined: check_stop fast path + context manager removal + local caching
+21	2026-03-28T15:06:13.678864+00:00	eeaaeea6893d48137a3676e4a692a21094dbbde4	4986.924557688738	completed	Raise GC gen-0 threshold to reduce collection frequency during serving
+22	2026-03-28T15:13:15.115940+00:00	928c29a5aca6ad562f19f3b3675de4381fa2304d	4996.884559810528	completed	Increase max_num_batched_tokens to 16384 and max_num_seqs to 512
+23	2026-03-28T15:17:45.501753+00:00	928c29a5aca6ad562f19f3b3675de4381fa2304d	4997.468344473163	completed	Increase default stream_interval from 1 to 4 to batch output processing
+25	2026-03-28T15:29:46.984453+00:00	928c29a5aca6ad562f19f3b3675de4381fa2304d	5001.673789763248	completed	Finale: modified source, no profiling

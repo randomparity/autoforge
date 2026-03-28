@@ -200,6 +200,24 @@ The profiling library lives in `autoforge/perf/`: `profile.py` (capture),
 detection and PMU event profiles), `diff.py` (differential comparison between
 runs), and `gate.py` (CI regression gate with pass/warn/fail thresholds).
 
+### Debug symbols for container profiling
+
+When profiling containerized processes, `perf` resolves symbols from the
+container's filesystem via `--symfs`. For complete symbol resolution:
+
+**Inside the container image** (build-time):
+- Python debug symbols: install `python3-dbg` or build Python with `--with-debug`
+- PyTorch/vLLM symbols are typically available (Python packages include `.so` files with symbols)
+
+**On the runner host** (NVIDIA GPU drivers):
+- Ubuntu/Debian: `apt install nvidia-driver-XXX-server-dbgsym` (replace XXX with your driver version)
+- RHEL/CentOS: `yum install nvidia-driver-debuginfo` from the NVIDIA CUDA repo
+- Verify: `perf report` should show named NVIDIA functions instead of `[unknown]`
+
+**Kernel symbols:**
+- Ensure `kptr_restrict = 0`: `sudo sysctl kernel.kptr_restrict=0`
+- Install kernel debuginfo: `apt install linux-image-$(uname -r)-dbgsym` (Ubuntu) or `debuginfo-install kernel` (RHEL)
+
 ## Running
 
 ```bash
@@ -215,7 +233,7 @@ The runner supports four phase modes (configured via `[runner].phase`):
 
 **Full runner daemon loop (phase=all):**
 
-1. `git pull --rebase` to fetch new requests
+1. `git pull --rebase` to fetch new requests; if any `.py` or `.toml` files changed since startup, re-exec the process to pick up new code/config
 2. Scan `projects/<project>/sprints/<sprint>/requests/` for pending requests
 3. Claim the first pending request (`pending` → `claimed`)
 4. Build the project at the specified commit (`claimed` → `building` → `built`)
@@ -298,6 +316,14 @@ For DTS: check the DTS output directory for full test logs. The request JSON
 The runner automatically retries push operations up to 3 times with
 `git pull --rebase` between attempts. If all retries fail, the request is
 marked as failed and logged.
+
+**Unexpected restarts**
+After each `git pull`, the runner checks whether any `.py` or `.toml` files
+changed since it started. If they did, it re-executes itself via `os.execvp`
+to pick up the updated code or config. When running under systemd, this
+appears as a normal service restart in `journalctl`. This is expected behavior
+and not a crash. Only `.py` and `.toml` changes trigger a restart — request
+files (`.json`) and results (`.tsv`) do not.
 
 **Stale requests**
 On startup, the runner recovers any requests stuck in intermediate statuses

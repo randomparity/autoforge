@@ -21,6 +21,8 @@ engine_args = [
     "--enable-chunked-prefill",
 ]
 
+# perf_map = true  # set PYTHONPERFSUPPORT=1 in container for Python perf map files
+
 [deploy.env]
 HF_TOKEN = "${HF_TOKEN:-}"
 # VLLM_ATTENTION_BACKEND = "FLASH_ATTN"

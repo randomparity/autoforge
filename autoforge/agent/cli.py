@@ -639,7 +639,7 @@ def cmd_sysinfo(role: str) -> None:
     import json
 
     from autoforge.agent.sprint import docs_dir
-    from autoforge.agent.sysinfo import save_sysinfo
+    from autoforge.sysinfo import save_sysinfo
 
     path = save_sysinfo(role, docs_dir())
     data = json.loads(path.read_text())

@@ -138,3 +138,20 @@ All registered: context, status, poll, judge, baseline, finale, revert, build-lo
 - Bullet markers: `-` throughout
 - No TOC in any doc (acceptable given current lengths)
 - sprint summary format: Overview table, Throughput graph, Accepted Patches table, Rejected Experiments table, Build/Test Failures table, Appendices
+- vLLM sprint summary (2026-03-27-vllm-perf-profiling) uses a simpler format: Objective, Outcome, Key Numbers, What Was Tried, Why Nothing Worked, Infrastructure Improvements, Lessons Learned, Recommendations, System Info — acceptable given no accepted patches to tabulate
+
+## Confirmed facts (feat/vllm-perf-profiling)
+- autoforge/git_utils.py is a NEW shared module: git_pull_with_stash(), git_head_commit(), code_changed_since(), git_push_with_retry() — now correctly listed in CLAUDE.md package boundaries
+- autoforge/runner/base.py is a NEW module split from service.py: PhaseRunner base, BuildRunner, DeployRunner, TestRunner, FullRunner, poll_loop(), recover_stale_requests()
+- code_changed_since() checks .py and .toml files only (confirmed in code) — matches runner.md description
+- restart uses os.execvp (confirmed in base.py _restart()) — runner.md accurate
+- perf record and perf stat run CONCURRENTLY via Popen (not sequentially) — program.md step 2 presents them as one step which is acceptable
+- profiling duration default: 30s (from base.py `profiling_cfg.get("duration", 30)`) — matches program.md "30 seconds"
+- sudo config for perf-container: perf-container.toml has `sudo = false` by default; local override needed
+- perf-container.toml [profiling] section is the correct section name (not [profiling] on runner.toml)
+- program.md step 3 for sudo: `[profiling]\nsudo = true` — correct section name per perf-container.toml
+- perf_event_paranoid: program.md says "<= 0", plugin-sdk.md says "<= 1". For PEBS precise events, <= 0 is stricter and more correct for this use case. Not a contradiction — just different contexts.
+- threshold in campaign.toml comment says "keep changes that improve throughput by >= 1%" — this is WRONG, threshold is an absolute delta (1.0 tok/s), not a percentage. This is a pre-existing issue from feat/add-first-vllm-tests, still present on this branch.
+- `uv run autoforge sprint active` command exists in CLI (cmd_sprint_active at line 708)
+- `build-log` is a registered alias for `logs` — both work; program.md uses `build-log --seq N` which is correct
+- VLLM_USE_PRECOMPILED=1 is set during container build (confirmed in builds/container.py)
