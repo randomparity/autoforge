@@ -1,0 +1,6 @@
+[profiling]
+enabled = true
+frequency = 99
+sudo = false
+container_name = "vllm-bench"
+runtime = "auto"

@@ -1,2 +1,2 @@
 project = "vllm"
-sprint = "2026-03-27-vllm-source-opt"
+sprint = "2026-03-27-vllm-perf-profiling"

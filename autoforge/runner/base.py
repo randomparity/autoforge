@@ -6,6 +6,7 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Any
 
 from autoforge.campaign import (
     CampaignConfig,
@@ -170,6 +171,60 @@ def _run_deploy(
     return deploy_result
 
 
+def _run_profile(
+    campaign: CampaignConfig,
+    config: RunnerConfig,
+    deploy_result: DeployResult,
+) -> dict[str, Any] | None:
+    """Run the profiler plugin if profiling is enabled. Returns summary or None.
+
+    Profile failure is non-fatal — logs a warning and returns None.
+    """
+    profiling_cfg = campaign.get("profiling", {})
+    if not profiling_cfg.get("enabled", False):
+        return None
+
+    proj_cfg = _project_config(campaign)
+    proj_name = project_name(campaign)
+    profiler_name = proj_cfg.get("profiler")
+    if not profiler_name:
+        logger.debug("Profiling enabled but no profiler plugin configured")
+        return None
+
+    try:
+        profiler = load_component(
+            proj_name,
+            "profiler",
+            profiler_name,
+            project_config=proj_cfg,
+            runner_config=config,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        logger.warning("Failed to load profiler %r: %s", profiler_name, exc)
+        return None
+
+    duration = int(profiling_cfg.get("duration", 30))
+    profile_config: dict[str, Any] = {**deploy_result.target_info}
+
+    logger.info("Running profiler %r for %ds", profiler_name, duration)
+    try:
+        result = profiler.profile(pid=0, duration=duration, config=profile_config)
+    except Exception:
+        logger.exception("Profiler %r raised an exception", profiler_name)
+        return None
+
+    if not result.success:
+        logger.warning("Profiler %r failed: %s", profiler_name, result.error)
+        return None
+
+    logger.info(
+        "Profiling complete (%s, %.1fs)",
+        profiler_name,
+        result.duration_seconds,
+    )
+    return result.summary
+
+
 def _run_test(
     request: TestRequest,
     request_path: Path,
@@ -209,10 +264,15 @@ def _run_test(
         )
         return
 
+    results_json = test_result.results_json or {}
+    profile_summary = _run_profile(campaign, config, deploy_result)
+    if profile_summary is not None:
+        results_json["profile"] = profile_summary
+
     complete_request(
         request,
         request_path,
-        results_json=test_result.results_json,
+        results_json=results_json,
         results_summary=test_result.results_summary,
         metric_value=test_result.metric_value,
     )
