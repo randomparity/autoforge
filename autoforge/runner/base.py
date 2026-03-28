@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
+import sys
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -17,7 +19,7 @@ from autoforge.campaign import (
 from autoforge.campaign import (
     project_config as _project_config,
 )
-from autoforge.git_utils import git_pull_with_stash
+from autoforge.git_utils import code_changed_since, git_head_commit, git_pull_with_stash
 from autoforge.plugins.loader import load_component
 from autoforge.plugins.protocols import BuildResult, DeployResult, RunnerConfig
 from autoforge.pointer import REPO_ROOT
@@ -361,9 +363,15 @@ class PhaseRunner(ABC):
         self.requests_dir = requests_dir
         self.runner_id = config.get("runner", {}).get("runner_id", "")
         self.poll_interval = int(config.get("runner", {}).get("poll_interval", 30))
+        self._startup_commit = git_head_commit(REPO_ROOT)
 
     needs_claim: bool = False
     """Whether this runner must claim requests before executing."""
+
+    @staticmethod
+    def _restart() -> None:
+        """Re-exec the current process to pick up code/config changes."""
+        os.execvp(sys.argv[0], sys.argv)
 
     @abstractmethod
     def execute_phase(self, request: TestRequest, request_path: Path) -> None:
@@ -386,6 +394,15 @@ class PhaseRunner(ABC):
                     logger.warning("Git pull failed, retrying next cycle")
                     time.sleep(self.poll_interval)
                     continue
+
+                if self._startup_commit is not None and code_changed_since(
+                    REPO_ROOT, self._startup_commit
+                ):
+                    logger.info(
+                        "Code/config changed since startup (%s); restarting",
+                        self._startup_commit[:8],
+                    )
+                    self._restart()
 
                 result = find_by_status(self.requests_dir, self.watch_status)
                 if result is None:
