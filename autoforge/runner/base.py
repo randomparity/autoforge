@@ -371,7 +371,10 @@ class PhaseRunner(ABC):
     @staticmethod
     def _restart() -> None:
         """Re-exec the current process to pick up code/config changes."""
-        os.execvp(sys.argv[0], sys.argv)
+        try:
+            os.execvp(sys.argv[0], sys.argv)
+        except OSError:
+            logger.error("os.execvp(%r) failed; continuing without restart", sys.argv[0])
 
     @abstractmethod
     def execute_phase(self, request: TestRequest, request_path: Path) -> None:
