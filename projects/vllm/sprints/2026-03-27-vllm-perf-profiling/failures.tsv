@@ -8,3 +8,5 @@ timestamp	source_commit	metric_value	description	diff_summary
  1 file changed, 23 insertions(+), 19 deletions(-)"
 2026-03-28T14:00:58.290528+00:00	8ea616a2bf42369bbf4d2bb01b8b1df29d37c090	2372.137327368912	Pure-decode fast path in _prepare_inputs with correct dtypes	"vllm/v1/worker/gpu_model_runner.py | 40 +++++++++++++++++++++++++-------------
  1 file changed, 27 insertions(+), 13 deletions(-)"
+2026-03-28T14:17:44.683248+00:00	828a2d386b227723ecb3edb319ecd20f9c07bc06	2381.282373937819	Fix init + stacked micro-optimizations for scheduler hot path	"vllm/v1/core/sched/scheduler.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)"
